@@ -13,7 +13,7 @@ export function MainPage() {
     useCurrentGameData();
   const logs = useGameStore((state) => state.logs);
   const navigate = useGameStore((state) => state.navigate);
-  const drawEvent = useGameStore((state) => state.drawEvent);
+  const generateAiNarrativeEvent = useGameStore((state) => state.generateAiNarrativeEvent);
   const settleCurrentLife = useGameStore((state) => state.settleCurrentLife);
   const lastActionMessage = useGameStore((state) => state.lastActionMessage);
 
@@ -92,8 +92,8 @@ export function MainPage() {
             >
               嘗試突破
             </button>
-            <button type="button" onClick={drawEvent}>
-              探尋奇遇
+            <button type="button" onClick={generateAiNarrativeEvent}>
+              天機歷練
             </button>
             <button type="button" onClick={() => navigate("shop")}>
               輪迴商店

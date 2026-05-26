@@ -475,6 +475,40 @@ input:focus {
   font-weight: 850;
 }
 
+.narrative-choice {
+  border-left-width: 4px;
+}
+
+.risk-safe,
+.risk-low {
+  border-left-color: var(--success);
+}
+
+.risk-medium {
+  border-left-color: var(--warning);
+}
+
+.risk-high,
+.risk-fatal {
+  border-left-color: var(--danger);
+}
+
+.change-positive strong {
+  color: var(--success);
+}
+
+.change-negative strong {
+  color: var(--warning);
+}
+
+.change-danger strong {
+  color: var(--mythic-rose);
+}
+
+.change-neutral strong {
+  color: var(--aura-cyan);
+}
+
 .plain-list {
   display: grid;
   gap: 10px;

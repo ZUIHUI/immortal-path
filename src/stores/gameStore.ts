@@ -1,13 +1,21 @@
 import { create } from "zustand";
 import { attemptBreakthrough as runBreakthrough } from "../core/breakthrough";
-import { createId } from "../core/balance";
+import {
+  addStatuses,
+  applyAttributeDelta,
+  applyResourceDelta,
+  clamp,
+  createId,
+} from "../core/balance";
 import { cultivate } from "../core/cultivation";
+import { checkDeath } from "../core/death";
 import {
   drawWeightedEvent,
   getAvailableEvents,
   resolveEventOption,
   summarizeEventResultChanges,
 } from "../core/eventEngine";
+import { resolveAiSuggestedEffects } from "../core/narrativeEffectResolver";
 import {
   applyReincarnationResult,
   createInitialMeta,
@@ -23,20 +31,31 @@ import { getHigherRealmId } from "../data/realms";
 import { getShopItemById } from "../data/reincarnationShop";
 import { getWorldById } from "../data/worlds";
 import { SAVE_VERSION } from "../constants/game";
+import {
+  continueNarrativeScene,
+  generateNarrativeScene,
+} from "../services/narrativeApiClient";
 import { saveService } from "../services/saveService";
 import type {
+  AiNarrativeResponse,
+  AiNarrativeState,
+  AttributeMap,
   EventId,
   FateId,
+  GameEffect,
   GameEvent,
   GameLog,
   GameLogType,
   GamePage,
   IdentityId,
   LifeState,
+  NarrativeLogSummary,
+  NarrativePlayerSnapshot,
   Player,
   BreakthroughMethodId,
   ReincarnationEndType,
   ReincarnationResult,
+  ResourceMap,
   SaveData,
   ShopItemId,
   WorldId,
@@ -49,6 +68,7 @@ interface GameStateData {
   logs: GameLog[];
   currentEvent?: GameEvent;
   latestResult?: ReincarnationResult;
+  aiNarrativeState: AiNarrativeState;
   currentPage: GamePage;
   lastActionMessage?: string;
 }
@@ -65,6 +85,10 @@ interface GameActions {
   attemptBreakthrough: (methodId?: BreakthroughMethodId) => void;
   drawEvent: () => void;
   chooseEventOption: (eventId: EventId, optionId: string) => void;
+  generateAiNarrativeEvent: () => Promise<void>;
+  chooseAiNarrativeChoice: (choiceId: string) => Promise<void>;
+  applyAiNarrativeResult: (response: AiNarrativeResponse) => void;
+  endAiNarrativeEvent: () => void;
   settleCurrentLife: (reason?: string, endType?: ReincarnationEndType) => void;
   buyShopItem: (itemId: ShopItemId) => void;
   resetSave: () => void;
@@ -90,6 +114,16 @@ function appendLogs(logs: GameLog[], additions: GameLog[]): GameLog[] {
   return [...additions, ...logs].slice(0, 100);
 }
 
+function createEmptyAiNarrativeState(): AiNarrativeState {
+  return {
+    isLoading: false,
+    active: false,
+    currentScene: null,
+    history: [],
+    error: null,
+  };
+}
+
 function calculateYearsSurvived(player: Player, life: LifeState): number {
   return Math.max(0, player.age - life.startingAge);
 }
@@ -104,6 +138,7 @@ function toSaveData(state: GameStateData): SaveData {
     logs: state.logs,
     currentEvent: state.currentEvent,
     latestResult: state.latestResult,
+    aiNarrativeState: state.aiNarrativeState,
     currentPage: state.currentPage,
   };
 }
@@ -123,6 +158,7 @@ function getInitialState(): GameStateData {
       logs: loaded.logs,
       currentEvent: loaded.currentEvent,
       latestResult: loaded.latestResult,
+      aiNarrativeState: loaded.aiNarrativeState ?? createEmptyAiNarrativeState(),
       currentPage: loaded.player ? loaded.currentPage : "start",
     };
   }
@@ -130,6 +166,7 @@ function getInitialState(): GameStateData {
   return {
     meta: createInitialMeta(),
     logs: [],
+    aiNarrativeState: createEmptyAiNarrativeState(),
     currentPage: "start",
   };
 }
@@ -181,8 +218,193 @@ function finalizeLife(
     logs: appendLogs(state.logs, [summaryLog, ...extraLogs]),
     currentEvent: undefined,
     latestResult: resultWithBonuses,
+    aiNarrativeState: createEmptyAiNarrativeState(),
     currentPage: "result",
     lastActionMessage: summaryLog.message,
+  };
+}
+
+function createNarrativePlayerSnapshot(player: Player): NarrativePlayerSnapshot {
+  return {
+    name: player.name,
+    generation: player.generation,
+    currentWorldId: player.currentWorldId,
+    identityId: player.identityId,
+    fateId: player.fateId,
+    realmId: player.realmId,
+    highestRealmId: player.highestRealmId,
+    cultivation: player.cultivation,
+    age: player.age,
+    lifespan: player.lifespan,
+    hp: player.hp,
+    maxHp: player.maxHp,
+    spiritualRoot: player.spiritualRoot,
+    divineSense: player.divineSense,
+    attack: player.attack,
+    defense: player.defense,
+    comprehension: player.comprehension,
+    luck: player.luck,
+    daoHeart: player.daoHeart,
+    status: player.status,
+    resources: player.resources,
+  };
+}
+
+function recentLogSummaries(logs: GameLog[]): NarrativeLogSummary[] {
+  return logs.slice(0, 5).map((log) => ({
+    type: log.type,
+    message: log.message,
+  }));
+}
+
+function drawStaticEventState(
+  state: GameStateData,
+  reason?: string,
+): GameStateData {
+  if (!state.player || !state.life || !state.life.isAlive) {
+    return state;
+  }
+
+  const world = getWorldById(state.life.worldId);
+  const availableEvents = getAvailableEvents(
+    events,
+    world.eventPool,
+    state.player,
+    state.life,
+  );
+  const currentEvent = drawWeightedEvent(availableEvents, Math.random, state.player);
+  const log = currentEvent
+    ? createLog(
+        state.player.generation,
+        "event",
+        reason
+          ? `${reason} 改由既有事件推進：${currentEvent.title}。`
+          : `歷練觸發事件：${currentEvent.title}。`,
+      )
+    : undefined;
+
+  return {
+    ...state,
+    currentEvent,
+    currentPage: "event",
+    logs: log ? appendLogs(state.logs, [log]) : state.logs,
+    aiNarrativeState: {
+      ...state.aiNarrativeState,
+      isLoading: false,
+      active: false,
+      error: reason ?? state.aiNarrativeState.error,
+    },
+    lastActionMessage: log?.message ?? reason,
+  };
+}
+
+function applyNarrativeGameEffects(
+  player: Player,
+  life: LifeState,
+  effects: GameEffect[],
+): {
+  player: Player;
+  life: LifeState;
+  deathReason?: string;
+  breakthroughHint?: string;
+} {
+  let nextPlayer = player;
+  let nextLife = life;
+  let deathReason: string | undefined;
+  let breakthroughHint: string | undefined;
+
+  for (const effect of effects) {
+    switch (effect.type) {
+      case "cultivationDelta":
+        nextPlayer = {
+          ...nextPlayer,
+          cultivation: Math.max(0, nextPlayer.cultivation + (effect.value ?? 0)),
+        };
+        nextLife = {
+          ...nextLife,
+          maxSingleCultivationGain: Math.max(
+            nextLife.maxSingleCultivationGain,
+            Math.max(0, effect.value ?? 0),
+          ),
+        };
+        break;
+      case "resourceDelta":
+        nextPlayer = applyResourceDelta(nextPlayer, {
+          [effect.target as keyof ResourceMap]: effect.value ?? 0,
+        });
+        break;
+      case "attributeDelta":
+        nextPlayer = applyAttributeDelta(nextPlayer, {
+          [effect.target as keyof AttributeMap]: effect.value ?? 0,
+        });
+        break;
+      case "hpDelta":
+        nextPlayer = {
+          ...nextPlayer,
+          hp: clamp(nextPlayer.hp + (effect.value ?? 0), 0, nextPlayer.maxHp),
+        };
+        break;
+      case "lifespanDelta":
+        nextPlayer = {
+          ...nextPlayer,
+          lifespan: Math.max(nextPlayer.age + 1, nextPlayer.lifespan + (effect.value ?? 0)),
+        };
+        break;
+      case "statusAdd":
+        nextPlayer = {
+          ...nextPlayer,
+          status: addStatuses(nextPlayer.status, [effect.target as Player["status"][number]]),
+        };
+        break;
+      case "eventFlag":
+        nextLife = {
+          ...nextLife,
+          importantEventIds: Array.from(
+            new Set([...nextLife.importantEventIds, effect.target ?? createId("ai-flag")]),
+          ),
+        };
+        break;
+      case "reincarnationPointMultiplierDelta":
+        nextLife = {
+          ...nextLife,
+          reincarnationPointMultiplier:
+            nextLife.reincarnationPointMultiplier + (effect.value ?? 0),
+        };
+        break;
+      case "triggerDeath":
+        deathReason = effect.reason;
+        break;
+      case "breakthroughHint":
+        breakthroughHint = effect.reason;
+        break;
+      case "completeWorldObjective":
+        nextLife = {
+          ...nextLife,
+          objectiveCompleted: true,
+        };
+        break;
+    }
+  }
+
+  const death = checkDeath(nextPlayer, deathReason);
+
+  if (death.isDead) {
+    nextPlayer = {
+      ...nextPlayer,
+      hp: 0,
+      status: ["dead"],
+    };
+  }
+
+  return {
+    player: nextPlayer,
+    life: {
+      ...nextLife,
+      yearsSurvived: calculateYearsSurvived(nextPlayer, nextLife),
+      highestRealmId: getHigherRealmId(nextLife.highestRealmId, nextPlayer.highestRealmId),
+    },
+    deathReason: death.reason,
+    breakthroughHint,
   };
 }
 
@@ -218,6 +440,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       meta,
       currentEvent: undefined,
       latestResult: undefined,
+      aiNarrativeState: createEmptyAiNarrativeState(),
       currentPage: "main",
       logs: appendLogs(state.logs, [log]),
       lastActionMessage: log.message,
@@ -422,6 +645,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       ...state,
       currentEvent,
       currentPage: "event",
+      aiNarrativeState: createEmptyAiNarrativeState(),
       logs: log ? appendLogs(state.logs, [log]) : state.logs,
       lastActionMessage: log?.message,
     };
@@ -503,6 +727,235 @@ export const useGameStore = create<GameStore>((set, get) => ({
     persist(nextState);
   },
 
+  async generateAiNarrativeEvent() {
+    const state = get();
+
+    if (
+      state.aiNarrativeState.isLoading ||
+      !state.player ||
+      !state.life ||
+      !state.life.isAlive
+    ) {
+      return;
+    }
+
+    const loadingState: GameStateData = {
+      ...state,
+      currentEvent: undefined,
+      currentPage: "event",
+      aiNarrativeState: {
+        ...state.aiNarrativeState,
+        isLoading: true,
+        active: true,
+        error: null,
+      },
+      lastActionMessage: "天機推演中……",
+    };
+
+    set(loadingState);
+    persist(loadingState);
+
+    try {
+      const response = await generateNarrativeScene({
+        lifeState: state.life,
+        metaProgress: state.meta,
+        worldId: state.life.worldId,
+        playerSnapshot: createNarrativePlayerSnapshot(state.player),
+        recentLogs: recentLogSummaries(state.logs),
+        triggerType: "manual_explore",
+      });
+
+      get().applyAiNarrativeResult(response);
+    } catch {
+      const fallbackState = drawStaticEventState(
+        get(),
+        "天機混沌，改由既有事件推進",
+      );
+      set(fallbackState);
+      persist(fallbackState);
+    }
+  },
+
+  async chooseAiNarrativeChoice(choiceId) {
+    const state = get();
+    const scene = state.aiNarrativeState.currentScene;
+    const selectedChoice = scene?.choices.find((choice) => choice.choiceId === choiceId);
+
+    if (
+      state.aiNarrativeState.isLoading ||
+      !state.player ||
+      !state.life ||
+      !state.life.isAlive ||
+      !scene ||
+      !selectedChoice
+    ) {
+      return;
+    }
+
+    const loadingState: GameStateData = {
+      ...state,
+      aiNarrativeState: {
+        ...state.aiNarrativeState,
+        isLoading: true,
+        active: true,
+        error: null,
+        history: [
+          {
+            sceneId: scene.sceneId,
+            title: scene.title,
+            selectedChoiceId: choiceId,
+            createdAt: new Date().toISOString(),
+          },
+          ...state.aiNarrativeState.history,
+        ].slice(0, 20),
+      },
+      lastActionMessage: "天機推演中……",
+    };
+
+    set(loadingState);
+    persist(loadingState);
+
+    try {
+      const response = await continueNarrativeScene({
+        lifeState: state.life,
+        metaProgress: state.meta,
+        currentNarrativeState: scene,
+        selectedChoice,
+        playerSnapshot: createNarrativePlayerSnapshot(state.player),
+        recentLogs: recentLogSummaries(state.logs),
+      });
+
+      get().applyAiNarrativeResult(response);
+    } catch {
+      const fallbackState = drawStaticEventState(
+        get(),
+        "天機混沌，改由既有事件推進",
+      );
+      set(fallbackState);
+      persist(fallbackState);
+    }
+  },
+
+  applyAiNarrativeResult(response) {
+    const state = get();
+
+    if (!state.player || !state.life || !state.life.isAlive) {
+      return;
+    }
+
+    const world = getWorldById(state.life.worldId);
+    const resolved = resolveAiSuggestedEffects({
+      aiEffects: response.suggestedEffects,
+      player: state.player,
+      lifeState: state.life,
+      metaProgress: state.meta,
+      worldConfig: world,
+      responseFlags: response,
+    });
+    const applied = applyNarrativeGameEffects(
+      state.player,
+      {
+        ...state.life,
+        completedEventIds: Array.from(
+          new Set([...state.life.completedEventIds, response.sceneId]),
+        ),
+        importantEventIds:
+          response.rarity === "common"
+            ? state.life.importantEventIds
+            : Array.from(new Set([...state.life.importantEventIds, response.sceneId])),
+        rareEventsCompleted:
+          state.life.rareEventsCompleted + (response.rarity === "common" ? 0 : 1),
+        epicEventsCompleted:
+          state.life.epicEventsCompleted + (response.rarity === "epic" ? 1 : 0),
+        legendaryEventsCompleted:
+          state.life.legendaryEventsCompleted +
+          (response.rarity === "legendary" ? 1 : 0),
+        mythicEventsCompleted:
+          state.life.mythicEventsCompleted + (response.rarity === "mythic" ? 1 : 0),
+      },
+      resolved.effects,
+    );
+    const visibleText = resolved.visibleChanges
+      .map((change) => `${change.label} ${change.value}`)
+      .join("、");
+    const warningsText = resolved.balanceWarnings.length
+      ? `（已平衡：${resolved.balanceWarnings.join("、")}）`
+      : "";
+    const narrativeLog = createLog(
+      applied.player.generation,
+      "event",
+      `${response.logText}${visibleText ? `｜${visibleText}` : ""}${warningsText}`,
+    );
+    const extraLogs = [narrativeLog];
+
+    if (applied.deathReason) {
+      const nextState = finalizeLife(
+        state,
+        applied.player,
+        applied.life,
+        applied.deathReason,
+        "death",
+        extraLogs,
+      );
+      set(nextState);
+      persist(nextState);
+      return;
+    }
+
+    if (applied.life.objectiveCompleted && !state.life.objectiveCompleted) {
+      const nextState = finalizeLife(
+        state,
+        applied.player,
+        applied.life,
+        response.logText || "AI 劇情完成世界目標。",
+        "objective",
+        extraLogs,
+      );
+      set(nextState);
+      persist(nextState);
+      return;
+    }
+
+    const nextState: GameStateData = {
+      ...state,
+      player: applied.player,
+      life: applied.life,
+      currentEvent: undefined,
+      currentPage:
+        response.shouldEndEvent && applied.breakthroughHint ? "breakthrough" : "event",
+      logs: appendLogs(state.logs, extraLogs),
+      aiNarrativeState: {
+        isLoading: false,
+        active: !response.shouldEndEvent,
+        currentScene: response,
+        history: [
+          {
+            sceneId: response.sceneId,
+            title: response.title,
+            createdAt: new Date().toISOString(),
+          },
+          ...state.aiNarrativeState.history,
+        ].slice(0, 20),
+        error: null,
+      },
+      lastActionMessage: applied.breakthroughHint ?? narrativeLog.message,
+    };
+
+    set(nextState);
+    persist(nextState);
+  },
+
+  endAiNarrativeEvent() {
+    const nextState: GameStateData = {
+      ...get(),
+      aiNarrativeState: createEmptyAiNarrativeState(),
+      currentPage: "main",
+    };
+
+    set(nextState);
+    persist(nextState);
+  },
+
   settleCurrentLife(reason = "主動結束本世，歸入輪迴", endType = "manual") {
     const state = get();
 
@@ -547,6 +1000,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       life: undefined,
       currentEvent: undefined,
       latestResult: undefined,
+      aiNarrativeState: createEmptyAiNarrativeState(),
       currentPage: "start",
       lastActionMessage: undefined,
     });

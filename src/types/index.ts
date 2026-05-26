@@ -57,6 +57,66 @@ export type CultivationCriticalTier =
 
 export type BreakthroughMethodId = "stable" | "force" | "defy_heaven";
 
+export type AiNarrativeMood =
+  | "calm"
+  | "mysterious"
+  | "danger"
+  | "epic"
+  | "breakthrough"
+  | "death";
+
+export type AiNarrativeRiskLevel = "safe" | "low" | "medium" | "high" | "fatal";
+
+export type AiNarrativeChoiceType =
+  | "cautious"
+  | "greedy"
+  | "kind"
+  | "ruthless"
+  | "reckless"
+  | "wise";
+
+export type AiSuggestedEffectType =
+  | "cultivationGain"
+  | "resourceGain"
+  | "resourceLoss"
+  | "statGain"
+  | "statLoss"
+  | "hpLoss"
+  | "lifespanLoss"
+  | "karmaGain"
+  | "destinyGain"
+  | "memoryGain"
+  | "statusGain"
+  | "eventFlag"
+  | "reincarnationBonus";
+
+export type AiSuggestedEffectIntensity =
+  | "tiny"
+  | "small"
+  | "medium"
+  | "large"
+  | "huge";
+
+export type NarrativeTriggerType =
+  | "manual_explore"
+  | "cultivation_event"
+  | "event_continue";
+
+export type GameEffectType =
+  | "cultivationDelta"
+  | "resourceDelta"
+  | "attributeDelta"
+  | "hpDelta"
+  | "lifespanDelta"
+  | "statusAdd"
+  | "eventFlag"
+  | "reincarnationPointMultiplierDelta"
+  | "triggerDeath"
+  | "breakthroughHint"
+  | "completeWorldObjective";
+
+export type VisibleChangeTone = "positive" | "negative" | "neutral" | "danger";
+
 export interface ResourceMap {
   spiritStones: number;
   aura: number;
@@ -299,6 +359,120 @@ export interface GameEvent {
   rarity: EventRarity;
 }
 
+export interface AiNarrativeChoice {
+  choiceId: string;
+  text: string;
+  previewText: string;
+  riskLevel: AiNarrativeRiskLevel;
+  choiceType: AiNarrativeChoiceType;
+  requirementHint?: string;
+}
+
+export interface AiSuggestedEffect {
+  type: AiSuggestedEffectType;
+  target?: string;
+  intensity: AiSuggestedEffectIntensity;
+  reason: string;
+}
+
+export interface AiNarrativeResponse {
+  sceneId: string;
+  title: string;
+  content: string;
+  mood: AiNarrativeMood;
+  rarity: EventRarity;
+  choices: AiNarrativeChoice[];
+  suggestedEffects: AiSuggestedEffect[];
+  settlementTags: string[];
+  logText: string;
+  shouldEndEvent: boolean;
+  shouldTriggerDeath: boolean;
+  deathReason?: string;
+  shouldTriggerBreakthrough: boolean;
+  shouldCompleteWorldObjective: boolean;
+}
+
+export interface NarrativePlayerSnapshot {
+  name: string;
+  generation: number;
+  currentWorldId: WorldId;
+  identityId: IdentityId;
+  fateId: FateId;
+  realmId: RealmId;
+  highestRealmId: RealmId;
+  cultivation: number;
+  age: number;
+  lifespan: number;
+  hp: number;
+  maxHp: number;
+  spiritualRoot: number;
+  divineSense: number;
+  attack: number;
+  defense: number;
+  comprehension: number;
+  luck: number;
+  daoHeart: number;
+  status: PlayerStatus[];
+  resources: ResourceMap;
+}
+
+export interface NarrativeLogSummary {
+  type: GameLogType;
+  message: string;
+}
+
+export interface GenerateNarrativeScenePayload {
+  lifeState: LifeState;
+  metaProgress: MetaProgress;
+  worldId: WorldId;
+  playerSnapshot: NarrativePlayerSnapshot;
+  recentLogs: NarrativeLogSummary[];
+  triggerType: NarrativeTriggerType;
+}
+
+export interface ContinueNarrativeScenePayload {
+  lifeState: LifeState;
+  metaProgress: MetaProgress;
+  currentNarrativeState: AiNarrativeResponse;
+  selectedChoice: AiNarrativeChoice;
+  playerSnapshot: NarrativePlayerSnapshot;
+  recentLogs: NarrativeLogSummary[];
+}
+
+export interface AiNarrativeHistoryEntry {
+  sceneId: string;
+  title: string;
+  selectedChoiceId?: string;
+  createdAt: string;
+}
+
+export interface AiNarrativeState {
+  isLoading: boolean;
+  active: boolean;
+  currentScene: AiNarrativeResponse | null;
+  history: AiNarrativeHistoryEntry[];
+  error: string | null;
+}
+
+export interface GameEffect {
+  type: GameEffectType;
+  target?: string;
+  value?: number;
+  reason: string;
+}
+
+export interface VisibleChange {
+  label: string;
+  value: string;
+  tone: VisibleChangeTone;
+}
+
+export interface ResolvedNarrativeEffects {
+  effects: GameEffect[];
+  visibleChanges: VisibleChange[];
+  balanceWarnings: string[];
+}
+
 export interface ReincarnationRewardBreakdown {
   realmReward: number;
   survivalReward: number;
@@ -365,6 +539,7 @@ export interface SaveData {
   logs: GameLog[];
   currentEvent?: GameEvent;
   latestResult?: ReincarnationResult;
+  aiNarrativeState?: AiNarrativeState;
   currentPage: GamePage;
 }
 

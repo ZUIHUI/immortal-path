@@ -17,6 +17,27 @@ import type {
 
 let client: OpenAI | undefined;
 
+function describeOpenAiError(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return "Unknown OpenAI API error";
+  }
+
+  const maybeApiError = error as Error & {
+    status?: number;
+    code?: string;
+    type?: string;
+  };
+
+  return [
+    maybeApiError.status ? `status=${maybeApiError.status}` : undefined,
+    maybeApiError.code ? `code=${maybeApiError.code}` : undefined,
+    maybeApiError.type ? `type=${maybeApiError.type}` : undefined,
+    error.message,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 function getClient(): OpenAI {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error("OPENAI_API_KEY is not configured");
@@ -59,6 +80,7 @@ async function createStructuredNarrative(prompt: string): Promise<AiNarrativeRes
       return parseOutputText(response.output_text);
     } catch (error) {
       lastError = error;
+      console.error("[narrative] OpenAI response failed", describeOpenAiError(error));
     }
   }
 

@@ -74,7 +74,6 @@ async function postNarrative<TPayload>(
     throw new Error("今日天機推演次數已達上限");
   }
 
-  incrementNarrativeApiUsage();
   const controller = new AbortController();
   const timeoutId = window.setTimeout(
     () => controller.abort(),
@@ -92,13 +91,26 @@ async function postNarrative<TPayload>(
     });
 
     if (!response.ok) {
-      const errorPayload = (await response.json().catch(() => undefined)) as
-        | { error?: string }
-        | undefined;
-      throw new Error(errorPayload?.error ?? "AI narrative API failed");
+      const responseText = await response.text().catch(() => "");
+      let message = responseText.slice(0, 240);
+
+      try {
+        const errorPayload = JSON.parse(responseText) as { error?: string };
+        message = errorPayload.error ?? message;
+      } catch {
+        // Non-JSON responses are useful for diagnosing missing Vercel routes.
+      }
+
+      throw new Error(
+        `AI narrative API failed (${response.status} ${response.statusText}): ${
+          message || "empty response"
+        }`,
+      );
     }
 
-    return parseAiNarrativeResponse(await response.json());
+    const parsed = parseAiNarrativeResponse(await response.json());
+    incrementNarrativeApiUsage();
+    return parsed;
   } finally {
     window.clearTimeout(timeoutId);
   }

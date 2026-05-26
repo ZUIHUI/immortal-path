@@ -317,6 +317,14 @@ function getAiNarrativeFallbackReason(error: unknown): string {
     return "天機推演逾時，已改由既有事件推進";
   }
 
+  if (message.includes("404")) {
+    return "找不到後端 API route，請確認 Vercel 已部署 /api/narrative，已改由既有事件推進";
+  }
+
+  if (message.includes("500")) {
+    return `後端 AI route 執行失敗：${message.slice(0, 160)}`;
+  }
+
   if (message.includes("今日天機推演次數已達上限")) {
     return "今日天機推演次數已達上限，已改由既有事件推進";
   }

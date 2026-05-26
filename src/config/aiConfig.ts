@@ -8,8 +8,8 @@ export const AI_CONFIG = {
   schemaRetryCount: 1,
   maxOutputTokens: 1400,
   temperature: 0.72,
-  requestTimeoutMs: 18_000,
+  requestTimeoutMs: 45_000,
   dailyUsageLimit: 40,
 };
 
-export const NARRATIVE_USAGE_STORAGE_KEY = "ai-narrative-usage-v1";
+export const NARRATIVE_USAGE_STORAGE_KEY = "ai-narrative-usage-v2";

@@ -298,6 +298,28 @@ function drawStaticEventState(
   };
 }
 
+function getAiNarrativeFallbackReason(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+
+  if (message.includes("insufficient_quota") || message.includes("quota")) {
+    return "OpenAI 額度不足或帳單尚未啟用，已改由既有事件推進";
+  }
+
+  if (message.includes("OPENAI_API_KEY") || message.includes("api key")) {
+    return "後端尚未正確設定 OPENAI_API_KEY，已改由既有事件推進";
+  }
+
+  if (message.includes("schema") || message.includes("Invalid AI narrative response")) {
+    return "AI 回傳格式不合規，已改由既有事件推進";
+  }
+
+  if (message.includes("abort") || message.includes("timeout")) {
+    return "天機推演逾時，已改由既有事件推進";
+  }
+
+  return "天機混沌，改由既有事件推進";
+}
+
 function applyNarrativeGameEffects(
   player: Player,
   life: LifeState,
@@ -766,10 +788,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       });
 
       get().applyAiNarrativeResult(response);
-    } catch {
+    } catch (error) {
       const fallbackState = drawStaticEventState(
         get(),
-        "天機混沌，改由既有事件推進",
+        getAiNarrativeFallbackReason(error),
       );
       set(fallbackState);
       persist(fallbackState);
@@ -826,10 +848,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       });
 
       get().applyAiNarrativeResult(response);
-    } catch {
+    } catch (error) {
       const fallbackState = drawStaticEventState(
         get(),
-        "天機混沌，改由既有事件推進",
+        getAiNarrativeFallbackReason(error),
       );
       set(fallbackState);
       persist(fallbackState);

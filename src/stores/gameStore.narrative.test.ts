@@ -90,7 +90,7 @@ describe("gameStore AI narrative actions", () => {
 
     await useGameStore.getState().generateAiNarrativeEvent();
 
-    expect(useGameStore.getState().aiNarrativeState.error).toContain("天機混沌");
+    expect(useGameStore.getState().aiNarrativeState.error).toContain("OpenAI 額度不足");
     expect(useGameStore.getState().currentEvent).toBeDefined();
   });
 

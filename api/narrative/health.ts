@@ -1,44 +1,62 @@
-export const runtime = "nodejs";
-export const maxDuration = 15;
-
 const NARRATIVE_MODEL = "gpt-4.1-nano";
 
-function jsonResponse(payload: unknown, status = 200): Response {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-    },
-  });
+function toApiErrorPayload(error: unknown, fallback: string) {
+  if (!(error instanceof Error)) {
+    return { ok: false, error: fallback };
+  }
+
+  const apiError = error as Error & {
+    status?: number;
+    code?: string;
+    type?: string;
+  };
+
+  return {
+    ok: false,
+    error: error.message,
+    status: apiError.status,
+    code: apiError.code,
+    type: apiError.type,
+  };
 }
 
-async function handleHealth(request: Request): Promise<Response> {
-  const url = new URL(request.url);
-  const probe = url.searchParams.get("probe");
+function getProbe(request: any): string | null {
+  if (typeof request.query?.probe === "string") {
+    return request.query.probe;
+  }
+
+  return new URL(request.url ?? "/", "https://local.invalid").searchParams.get("probe");
+}
+
+async function handleHealth(request: any) {
+  const probe = getProbe(request);
   let openAiProbe = null;
 
   if (probe === "openai") {
-    const { probeOpenAiNarrativeConnection } = await import(
-      "../../server/narrativeOpenAi"
-    );
-    openAiProbe = await probeOpenAiNarrativeConnection();
+    try {
+      const { probeOpenAiNarrativeConnection } = await import(
+        "../../server/narrativeOpenAi"
+      );
+      openAiProbe = await probeOpenAiNarrativeConnection();
+    } catch (error) {
+      openAiProbe = toApiErrorPayload(error, "OpenAI probe failed");
+    }
   }
 
-  return jsonResponse({
+  return {
     ok: true,
     hasOpenAiKey: Boolean(process.env.OPENAI_API_KEY),
     model: NARRATIVE_MODEL,
     nodeEnv: process.env.NODE_ENV ?? null,
     openAiProbe,
-  });
+  };
 }
 
-export default {
-  async fetch(request: Request): Promise<Response> {
-    if (request.method !== "GET") {
-      return jsonResponse({ ok: false, error: "Method not allowed" }, 405);
-    }
+export default async function handler(request: any, response: any) {
+  if (request.method !== "GET") {
+    response.status(405).json({ ok: false, error: "Method not allowed" });
+    return;
+  }
 
-    return handleHealth(request);
-  },
-};
+  response.status(200).json(await handleHealth(request));
+}

@@ -1,18 +1,5 @@
-export const runtime = "nodejs";
-export const maxDuration = 30;
-
-function jsonResponse(payload: unknown, status = 200): Response {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-    },
-  });
-}
-
-async function parseJsonBody(request: Request) {
-  const body = await request.text();
-  return body ? JSON.parse(body) : undefined;
+function parseBody(request: { body?: unknown }) {
+  return typeof request.body === "string" ? JSON.parse(request.body) : request.body;
 }
 
 function toApiErrorPayload(error: unknown, fallback: string) {
@@ -34,27 +21,27 @@ function toApiErrorPayload(error: unknown, fallback: string) {
   };
 }
 
-async function handleGenerate(request: Request): Promise<Response> {
+async function handleGenerate(request: any) {
   try {
     const { generateOpenAiNarrative } = await import("../../server/narrativeOpenAi");
-    const payload = await parseJsonBody(request);
-    const result = await generateOpenAiNarrative(payload);
-    return jsonResponse(result);
+    return await generateOpenAiNarrative(parseBody(request));
   } catch (error) {
     console.error("[narrative] generate route failed", error);
-    return jsonResponse(
-      toApiErrorPayload(error, "Failed to generate AI narrative scene"),
-      500,
-    );
+    throw error;
   }
 }
 
-export default {
-  async fetch(request: Request): Promise<Response> {
-    if (request.method !== "POST") {
-      return jsonResponse({ error: "Method not allowed" }, 405);
-    }
+export default async function handler(request: any, response: any) {
+  if (request.method !== "POST") {
+    response.status(405).json({ error: "Method not allowed" });
+    return;
+  }
 
-    return handleGenerate(request);
-  },
-};
+  try {
+    response.status(200).json(await handleGenerate(request));
+  } catch (error) {
+    response
+      .status(500)
+      .json(toApiErrorPayload(error, "Failed to generate AI narrative scene"));
+  }
+}

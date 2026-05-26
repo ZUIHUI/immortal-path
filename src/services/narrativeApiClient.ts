@@ -95,8 +95,20 @@ async function postNarrative<TPayload>(
       let message = responseText.slice(0, 240);
 
       try {
-        const errorPayload = JSON.parse(responseText) as { error?: string };
-        message = errorPayload.error ?? message;
+        const errorPayload = JSON.parse(responseText) as {
+          error?: string;
+          status?: number;
+          code?: string;
+          type?: string;
+        };
+        message = [
+          errorPayload.error,
+          errorPayload.status ? `status=${errorPayload.status}` : undefined,
+          errorPayload.code ? `code=${errorPayload.code}` : undefined,
+          errorPayload.type ? `type=${errorPayload.type}` : undefined,
+        ]
+          .filter(Boolean)
+          .join(" ");
       } catch {
         // Non-JSON responses are useful for diagnosing missing Vercel routes.
       }

@@ -1,6 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["iad1"],
   "functions": {
+    "api/ping.ts": {
+      "maxDuration": 5
+    },
     "api/narrative/generate.ts": {
       "maxDuration": 30
     },

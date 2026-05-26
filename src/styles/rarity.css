@@ -1,0 +1,92 @@
+.rarity-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.rarity-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 26px;
+  border: 1px solid rgba(226, 232, 240, 0.2);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.rarity-common,
+.rarity-badge-common {
+  border-color: rgba(226, 232, 240, 0.22);
+}
+
+.rarity-rare,
+.rarity-badge-rare {
+  border-color: rgba(34, 211, 238, 0.64);
+  box-shadow: 0 0 22px rgba(34, 211, 238, 0.16);
+}
+
+.rarity-epic,
+.rarity-badge-epic {
+  border-color: rgba(168, 85, 247, 0.72);
+  box-shadow: 0 0 28px rgba(168, 85, 247, 0.24);
+}
+
+.rarity-legendary,
+.rarity-badge-legendary {
+  border-color: rgba(250, 204, 21, 0.78);
+  box-shadow: 0 0 34px rgba(250, 204, 21, 0.24);
+}
+
+.rarity-mythic,
+.rarity-badge-mythic {
+  border-color: rgba(251, 113, 133, 0.86);
+  box-shadow:
+    0 0 38px rgba(251, 113, 133, 0.28),
+    0 0 58px rgba(250, 204, 21, 0.14);
+}
+
+.rarity-badge-common {
+  color: rgba(245, 231, 200, 0.82);
+  background: rgba(226, 232, 240, 0.08);
+}
+
+.rarity-badge-rare {
+  color: #a5f3fc;
+  background: rgba(34, 211, 238, 0.12);
+}
+
+.rarity-badge-epic {
+  color: #e9d5ff;
+  background: rgba(168, 85, 247, 0.14);
+}
+
+.rarity-badge-legendary {
+  color: #fef3c7;
+  background: rgba(250, 204, 21, 0.14);
+}
+
+.rarity-badge-mythic {
+  color: #ffe4e6;
+  background: linear-gradient(135deg, rgba(251, 113, 133, 0.18), rgba(250, 204, 21, 0.12));
+}
+
+.rarity-legendary::before,
+.rarity-mythic::before {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(115deg, transparent 0 38%, rgba(250, 204, 21, 0.12) 45%, transparent 54%),
+    radial-gradient(circle at 16% 24%, rgba(250, 204, 21, 0.16), transparent 25%);
+  pointer-events: none;
+  content: "";
+}
+
+.rarity-mythic::after {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  border: 1px solid rgba(251, 113, 133, 0.35);
+  pointer-events: none;
+  content: "";
+}

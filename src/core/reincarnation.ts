@@ -1,4 +1,4 @@
-import { getRealmById, getHigherRealmId } from "../data/realms";
+import { getHigherRealmId, getRealmById } from "../data/realms";
 import { reincarnationShopItems } from "../data/reincarnationShop";
 import {
   calculateShopItemCost,
@@ -16,21 +16,22 @@ import type {
   Player,
   ReincarnationEndType,
   ReincarnationResult,
+  ReincarnationRewardBreakdown,
   ReincarnationShopItem,
   World,
 } from "../types";
 
 const BASE_ATTRIBUTES = {
-  lifespan: 82,
-  spiritualRoot: 12,
-  hp: 100,
-  maxHp: 100,
-  divineSense: 8,
-  attack: 8,
-  defense: 6,
-  comprehension: 12,
-  luck: 10,
-  daoHeart: 10,
+  lifespan: 88,
+  spiritualRoot: 14,
+  hp: 120,
+  maxHp: 120,
+  divineSense: 10,
+  attack: 10,
+  defense: 8,
+  comprehension: 14,
+  luck: 12,
+  daoHeart: 12,
 };
 
 export function createInitialMeta(): MetaProgress {
@@ -39,22 +40,22 @@ export function createInitialMeta(): MetaProgress {
     reincarnationPoints: 0,
     totalEarnedReincarnationPoints: 0,
     pastLifeMemories: 0,
-    unlockedWorldIds: ["qingyun_little_world"],
+    unlockedWorldIds: ["world_qingyun"],
     unlockedIdentityIds: [
-      "village_orphan",
-      "outer_disciple",
-      "fallen_clan_heir",
+      "identity_orphan",
+      "identity_outer_disciple",
+      "identity_fallen_clan",
     ],
     unlockedFateIds: [
-      "deep_fortune",
-      "past_wisdom",
-      "ordinary_bones",
-      "short_lived",
-      "natural_dao_body",
+      "fate_deep_fortune",
+      "fate_past_wisdom",
+      "fate_ordinary_bones",
+      "fate_short_lived",
+      "fate_natural_dao_body",
     ],
     completedWorldIds: [],
     shopLevels: {},
-    bestRealmId: "mortal",
+    bestRealmId: "realm_mortal",
     history: [],
   };
 }
@@ -68,9 +69,9 @@ export function createPlayerForLife(
   meta: MetaProgress,
 ): Player {
   const metaBonuses = getMetaBonuses(meta);
-  const modifiers = mergeModifiers(identity.effects, fate.effects);
+  const modifiers = mergeModifiers(identity.statModifiers, fate.effects);
   const lifespan = Math.min(
-    world.worldRules.lifespanLimit,
+    world.worldRules.lifespanLimit + metaBonuses.initialLifespan,
     BASE_ATTRIBUTES.lifespan +
       (modifiers.lifespan ?? 0) +
       metaBonuses.initialLifespan,
@@ -81,13 +82,15 @@ export function createPlayerForLife(
     mergeResources(
       {
         ...defaultResources(),
-        spiritStones: 10,
+        spiritStones: 18,
+        pills: 1,
       },
       identity.initialResources,
     ),
-    fate.id === "past_wisdom"
+    fate.id === "fate_past_wisdom"
       ? {
           pastLifeMemory: 1,
+          destiny: 1,
         }
       : undefined,
   );
@@ -96,10 +99,10 @@ export function createPlayerForLife(
     id: createId("player"),
     name: name.trim() || `第${generation}世修士`,
     generation,
-    currentWorldId: world.id,
+    currentWorldId: world.worldId,
     identityId: identity.id,
     fateId: fate.id,
-    realmId: "mortal",
+    realmId: "realm_mortal",
     cultivation: 0,
     age: identity.initialAge,
     lifespan,
@@ -125,7 +128,7 @@ export function createPlayerForLife(
     unlockedWorldIds: meta.unlockedWorldIds,
     unlockedIdentityIds: meta.unlockedIdentityIds,
     unlockedFateIds: meta.unlockedFateIds,
-    highestRealmId: "mortal",
+    highestRealmId: "realm_mortal",
   };
 }
 
@@ -137,33 +140,104 @@ export function createLifeState(
 ): LifeState {
   return {
     generation,
-    worldId: world.id,
+    worldId: world.worldId,
     identityId: identity.id,
     fateId: fate.id,
     startedAt: new Date().toISOString(),
+    startingAge: identity.initialAge,
     isAlive: true,
     objectiveCompleted: false,
-    yearsSurvived: identity.initialAge,
-    highestRealmId: "mortal",
+    yearsSurvived: 0,
+    highestRealmId: "realm_mortal",
     completedEventIds: [],
     importantEventIds: [],
     rareEventsCompleted: 0,
+    epicEventsCompleted: 0,
+    legendaryEventsCompleted: 0,
+    mythicEventsCompleted: 0,
+    enlightenmentCount: 0,
+    maxSingleCultivationGain: 0,
+    defyingBreakthroughCount: 0,
+    reincarnationPointMultiplier: 1,
     enemiesDefeated: 0,
   };
 }
 
-function getWorldRating(score: number): string {
-  if (score >= 150) return "萬古留名";
-  if (score >= 125) return "半步飛升";
-  if (score >= 105) return "名震一界";
-  if (score >= 84) return "逆天改命";
-  if (score >= 66) return "一方強者";
-  if (score >= 48) return "小有所成";
-  if (score >= 28) return "初窺仙途";
+export function calculateWorldEvaluation(score: number): string {
+  if (score >= 220) return "萬古留名";
+  if (score >= 180) return "半步飛升";
+  if (score >= 145) return "名震一界";
+  if (score >= 112) return "逆天改命";
+  if (score >= 82) return "一方強者";
+  if (score >= 52) return "小有所成";
+  if (score >= 26) return "初窺仙途";
   return "凡塵過客";
 }
 
-export function calculateReincarnationResult(
+export function calculateLifeTitle(life: LifeState, score: number): string {
+  if (life.mythicEventsCompleted > 0) return "天命異數";
+  if (life.defyingBreakthroughCount > 0) return "逆天破關者";
+  if (life.objectiveCompleted) return "青雲築基者";
+  if (life.enlightenmentCount > 0) return "頓悟修士";
+  if (score >= 52) return "小界英才";
+  return "輪迴初醒";
+}
+
+export function calculateRewardBreakdown(
+  player: Player,
+  life: LifeState,
+): ReincarnationRewardBreakdown {
+  const highestRealm = getRealmById(player.highestRealmId);
+  const realmReward = highestRealm.order * 8 + 8;
+  const survivalReward = Math.min(18, Math.floor(life.yearsSurvived * 0.8));
+  const eventReward =
+    life.rareEventsCompleted * 3 +
+    life.epicEventsCompleted * 5 +
+    life.legendaryEventsCompleted * 12 +
+    life.mythicEventsCompleted * 24;
+  const breakthroughReward =
+    highestRealm.order * 4 + life.defyingBreakthroughCount * 18;
+  const objectiveReward = life.objectiveCompleted ? 28 : 0;
+  const deathModifier = player.status.includes("dead") ? 4 : 0;
+  const achievementBonus =
+    life.enlightenmentCount * 4 +
+    Math.floor(life.maxSingleCultivationGain / 120) +
+    Math.min(player.resources.destiny * 2, 18);
+  const multiplier = Math.max(1, life.reincarnationPointMultiplier);
+
+  return {
+    realmReward,
+    survivalReward,
+    eventReward,
+    breakthroughReward,
+    objectiveReward,
+    deathModifier,
+    achievementBonus,
+    multiplier,
+  };
+}
+
+export function calculateReincarnationPoints(
+  breakdownOrScore: ReincarnationRewardBreakdown | number,
+  objectiveCompleted = false,
+): number {
+  if (typeof breakdownOrScore === "number") {
+    return Math.max(12, Math.floor(breakdownOrScore / 5) + (objectiveCompleted ? 28 : 0));
+  }
+
+  const base =
+    breakdownOrScore.realmReward +
+    breakdownOrScore.survivalReward +
+    breakdownOrScore.eventReward +
+    breakdownOrScore.breakthroughReward +
+    breakdownOrScore.objectiveReward +
+    breakdownOrScore.deathModifier +
+    breakdownOrScore.achievementBonus;
+
+  return Math.max(12, Math.ceil(base * breakdownOrScore.multiplier));
+}
+
+export function createReincarnationResult(
   player: Player,
   life: LifeState,
   world: World,
@@ -171,19 +245,14 @@ export function calculateReincarnationResult(
   endType: ReincarnationEndType,
 ): ReincarnationResult {
   const highestRealm = getRealmById(player.highestRealmId);
-  const yearsScore = Math.min(24, Math.max(0, player.age - 12) * 0.35);
+  const breakdown = calculateRewardBreakdown(player, life);
+  const earnedReincarnationPoints = calculateReincarnationPoints(breakdown);
   const score = Math.round(
-    highestRealm.order * 18 +
-      yearsScore +
-      (life.objectiveCompleted ? 48 : 0) +
-      life.importantEventIds.length * 5 +
-      life.rareEventsCompleted * 8 +
-      Math.min(player.resources.destiny * 2, 14) -
-      Math.min(player.resources.karma, 10),
-  );
-  const earnedReincarnationPoints = Math.max(
-    3,
-    Math.floor(score / 8) + (life.objectiveCompleted ? 8 : 0),
+    highestRealm.order * 22 +
+      life.yearsSurvived * 0.8 +
+      (life.objectiveCompleted ? 50 : 0) +
+      breakdown.eventReward +
+      breakdown.achievementBonus,
   );
 
   return {
@@ -191,16 +260,25 @@ export function calculateReincarnationResult(
     generation: player.generation,
     identityId: player.identityId,
     fateId: player.fateId,
-    worldId: world.id,
-    yearsSurvived: Math.max(0, player.age - life.yearsSurvived + life.yearsSurvived),
+    worldId: world.worldId,
+    yearsSurvived: life.yearsSurvived,
     highestRealmId: player.highestRealmId,
     objectiveCompleted: life.objectiveCompleted,
     importantEventIds: life.importantEventIds,
     deathReason,
     endType,
-    worldRating: getWorldRating(score),
+    worldRating: calculateWorldEvaluation(score),
+    lifeTitle: calculateLifeTitle(life, score),
     score,
     earnedReincarnationPoints,
+    rewardBreakdown: breakdown,
+    maxSingleCultivationGain: life.maxSingleCultivationGain,
+    rareEventCount: life.rareEventsCompleted,
+    enlightenmentCount: life.enlightenmentCount,
+    defyingBreakthroughCount: life.defyingBreakthroughCount,
+    nextLifeBonusSummary: getNextLifeBonusSummaryFromMeta(
+      applyReincarnationResultPreview(player, life, earnedReincarnationPoints),
+    ),
     unlockedContent: life.objectiveCompleted
       ? ["青雲小界通關記憶", "築基感悟"]
       : [],
@@ -208,6 +286,22 @@ export function calculateReincarnationResult(
     createdAt: new Date().toISOString(),
   };
 }
+
+function applyReincarnationResultPreview(
+  player: Player,
+  life: LifeState,
+  earnedReincarnationPoints: number,
+): MetaProgress {
+  return {
+    ...createInitialMeta(),
+    totalLives: player.generation,
+    reincarnationPoints: earnedReincarnationPoints,
+    totalEarnedReincarnationPoints: earnedReincarnationPoints,
+    pastLifeMemories: 1 + (life.objectiveCompleted ? 1 : 0),
+  };
+}
+
+export const calculateReincarnationResult = createReincarnationResult;
 
 export function applyReincarnationResult(
   meta: MetaProgress,
@@ -235,7 +329,7 @@ export interface ShopPurchaseResult {
   message: string;
 }
 
-export function purchaseShopItem(
+export function applyShopUpgrade(
   meta: MetaProgress,
   item: ReincarnationShopItem,
 ): ShopPurchaseResult {
@@ -269,7 +363,40 @@ export function purchaseShopItem(
       },
     },
     success: true,
-    message: `${item.name}提升至 ${currentLevel + 1} 級。`,
+    message: `${item.name}提升至 ${currentLevel + 1} 級，下一世會明顯更強。`,
+  };
+}
+
+export const purchaseShopItem = applyShopUpgrade;
+
+export function createNewLife(params: {
+  name: string;
+  world: World;
+  identity: Identity;
+  fate: Fate;
+  meta: MetaProgress;
+}): {
+  meta: MetaProgress;
+  player: Player;
+  life: LifeState;
+} {
+  const generation = params.meta.totalLives + 1;
+  const meta: MetaProgress = {
+    ...params.meta,
+    totalLives: generation,
+  };
+
+  return {
+    meta,
+    player: createPlayerForLife(
+      params.name,
+      generation,
+      params.world,
+      params.identity,
+      params.fate,
+      meta,
+    ),
+    life: createLifeState(generation, params.world, params.identity, params.fate),
   };
 }
 
@@ -279,6 +406,22 @@ export function getShopItemEffectText(item: ReincarnationShopItem): string {
   }
 
   return `每級 +${item.effectPerLevel}`;
+}
+
+export function getNextLifeBonusSummary(meta: MetaProgress): string[] {
+  return getNextLifeBonusSummaryFromMeta(meta);
+}
+
+function getNextLifeBonusSummaryFromMeta(meta: MetaProgress): string[] {
+  const bonuses = getMetaBonuses(meta);
+
+  return [
+    `初始悟性 +${bonuses.initialComprehension}`,
+    `初始福緣 +${bonuses.initialLuck}`,
+    `修煉效率 +${Math.round(bonuses.cultivationEfficiencyBonus * 100)}%`,
+    `突破成功率 +${Math.round(bonuses.breakthroughRateBonus * 100)}%`,
+    `初始壽元 +${bonuses.initialLifespan}`,
+  ];
 }
 
 export function getAllShopItems(): ReincarnationShopItem[] {

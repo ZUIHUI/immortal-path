@@ -1,0 +1,108 @@
+@keyframes floatGain {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  24% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-24px) scale(1.08);
+  }
+}
+
+@keyframes pulseGold {
+  0%,
+  100% {
+    box-shadow: 0 0 20px rgba(250, 204, 21, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 42px rgba(250, 204, 21, 0.46);
+  }
+}
+
+@keyframes pulseMythic {
+  0%,
+  100% {
+    filter: saturate(1);
+    box-shadow: 0 0 26px rgba(251, 113, 133, 0.28);
+  }
+  50% {
+    filter: saturate(1.32);
+    box-shadow:
+      0 0 44px rgba(251, 113, 133, 0.5),
+      0 0 66px rgba(250, 204, 21, 0.26);
+  }
+}
+
+@keyframes shakeDanger {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-4px);
+  }
+  40% {
+    transform: translateX(4px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(3px);
+  }
+}
+
+@keyframes countGlow {
+  0% {
+    transform: scale(0.98);
+    text-shadow: none;
+  }
+  55% {
+    transform: scale(1.06);
+    text-shadow: 0 0 24px rgba(250, 204, 21, 0.5);
+  }
+  100% {
+    transform: scale(1);
+    text-shadow: 0 0 16px rgba(250, 204, 21, 0.28);
+  }
+}
+
+.floating-gain {
+  display: inline-flex;
+  color: var(--destiny-gold);
+  font-size: clamp(1.45rem, 4vw, 2.7rem);
+  font-weight: 950;
+  animation: floatGain 1.15s ease both;
+  text-shadow: 0 0 22px rgba(250, 204, 21, 0.38);
+}
+
+.pulse-gold {
+  animation: pulseGold 1.8s ease-in-out infinite;
+}
+
+.pulse-mythic,
+.rarity-mythic {
+  animation: pulseMythic 1.9s ease-in-out infinite;
+}
+
+.shake-danger {
+  animation: shakeDanger 360ms ease;
+}
+
+.count-up {
+  display: inline-flex;
+  animation: countGlow 900ms ease both;
+}
+
+.breakthrough-success {
+  border-color: rgba(250, 204, 21, 0.55);
+  animation: pulseGold 1.2s ease-in-out 2;
+}
+
+.breakthrough-failure {
+  border-color: rgba(239, 68, 68, 0.55);
+  animation: shakeDanger 360ms ease;
+}

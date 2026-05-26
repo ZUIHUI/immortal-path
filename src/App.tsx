@@ -10,10 +10,10 @@ import { useGameStore } from "./stores/gameStore";
 import type { GamePage } from "./types";
 
 const navItems: Array<{ page: GamePage; label: string }> = [
-  { page: "main", label: "主畫面" },
+  { page: "main", label: "洞府" },
   { page: "cultivation", label: "修煉" },
   { page: "breakthrough", label: "突破" },
-  { page: "event", label: "歷練" },
+  { page: "event", label: "奇遇" },
   { page: "shop", label: "輪迴商店" },
 ];
 
@@ -46,7 +46,7 @@ export default function App() {
   const page = !player && currentPage !== "shop" ? "start" : currentPage;
 
   return (
-    <div className="app-shell">
+    <div className="app-shell game-shell immortal-bg">
       <header className="app-header">
         <button className="brand-button" type="button" onClick={() => navigate("main")}>
           <span>{APP_NAME}</span>
@@ -96,7 +96,7 @@ export default function App() {
           className="ghost-button"
           type="button"
           onClick={() => {
-            if (window.confirm("確定要重置本機存檔？")) {
+            if (window.confirm("確定要清除目前存檔，重入輪迴嗎？")) {
               resetSave();
             }
           }}

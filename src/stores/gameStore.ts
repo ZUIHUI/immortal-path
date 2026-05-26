@@ -1,22 +1,27 @@
 import { create } from "zustand";
 import { attemptBreakthrough as runBreakthrough } from "../core/breakthrough";
-import { getAvailableEvents, drawWeightedEvent, resolveEventOption } from "../core/eventEngine";
+import { createId } from "../core/balance";
 import { cultivate } from "../core/cultivation";
 import {
+  drawWeightedEvent,
+  getAvailableEvents,
+  resolveEventOption,
+  summarizeEventResultChanges,
+} from "../core/eventEngine";
+import {
   applyReincarnationResult,
-  calculateReincarnationResult,
   createInitialMeta,
-  createLifeState,
-  createPlayerForLife,
+  createNewLife,
+  createReincarnationResult,
+  getNextLifeBonusSummary,
   purchaseShopItem,
 } from "../core/reincarnation";
-import { createId } from "../core/balance";
+import { events } from "../data/events";
 import { getFateById } from "../data/fates";
 import { getIdentityById } from "../data/identities";
 import { getHigherRealmId } from "../data/realms";
 import { getShopItemById } from "../data/reincarnationShop";
 import { getWorldById } from "../data/worlds";
-import { events } from "../data/events";
 import { SAVE_VERSION } from "../constants/game";
 import { saveService } from "../services/saveService";
 import type {
@@ -28,8 +33,8 @@ import type {
   GamePage,
   IdentityId,
   LifeState,
-  MetaProgress,
   Player,
+  BreakthroughMethodId,
   ReincarnationEndType,
   ReincarnationResult,
   SaveData,
@@ -40,11 +45,12 @@ import type {
 interface GameStateData {
   player?: Player;
   life?: LifeState;
-  meta: MetaProgress;
+  meta: ReturnType<typeof createInitialMeta>;
   logs: GameLog[];
   currentEvent?: GameEvent;
   latestResult?: ReincarnationResult;
   currentPage: GamePage;
+  lastActionMessage?: string;
 }
 
 interface GameActions {
@@ -56,7 +62,7 @@ interface GameActions {
     fateId: FateId;
   }) => void;
   cultivateOnce: () => void;
-  attemptBreakthrough: () => void;
+  attemptBreakthrough: (methodId?: BreakthroughMethodId) => void;
   drawEvent: () => void;
   chooseEventOption: (eventId: EventId, optionId: string) => void;
   settleCurrentLife: (reason?: string, endType?: ReincarnationEndType) => void;
@@ -82,6 +88,10 @@ function createLog(
 
 function appendLogs(logs: GameLog[], additions: GameLog[]): GameLog[] {
   return [...additions, ...logs].slice(0, 100);
+}
+
+function calculateYearsSurvived(player: Player, life: LifeState): number {
+  return Math.max(0, player.age - life.startingAge);
 }
 
 function toSaveData(state: GameStateData): SaveData {
@@ -138,14 +148,14 @@ function finalizeLife(
     endedAt: new Date().toISOString(),
     isAlive: false,
     deathReason: reason,
-    yearsSurvived: player.age,
+    yearsSurvived: calculateYearsSurvived(player, life),
     highestRealmId: getHigherRealmId(life.highestRealmId, player.highestRealmId),
   };
   const finalPlayer: Player = {
     ...player,
     status: endType === "death" ? ["dead"] : player.status,
   };
-  const result = calculateReincarnationResult(
+  const result = createReincarnationResult(
     finalPlayer,
     endedLife,
     world,
@@ -153,24 +163,26 @@ function finalizeLife(
     endType,
   );
   const meta = applyReincarnationResult(state.meta, result);
-  const logs = appendLogs(state.logs, [
-    createLog(
-      player.generation,
-      endType === "death" ? "death" : "reincarnation",
-      `本世結算：${result.worldRating}，獲得 ${result.earnedReincarnationPoints} 輪迴點。`,
-    ),
-    ...extraLogs,
-  ]);
+  const resultWithBonuses: ReincarnationResult = {
+    ...result,
+    nextLifeBonusSummary: getNextLifeBonusSummary(meta),
+  };
+  const summaryLog = createLog(
+    player.generation,
+    endType === "death" ? "death" : "reincarnation",
+    `本世結算：${resultWithBonuses.worldRating}，獲得 ${resultWithBonuses.earnedReincarnationPoints} 輪迴點。`,
+  );
 
   return {
     ...state,
     player: finalPlayer,
     life: endedLife,
     meta,
-    logs,
+    logs: appendLogs(state.logs, [summaryLog, ...extraLogs]),
     currentEvent: undefined,
-    latestResult: result,
+    latestResult: resultWithBonuses,
     currentPage: "result",
+    lastActionMessage: summaryLog.message,
   };
 }
 
@@ -187,13 +199,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const world = getWorldById(worldId);
     const identity = getIdentityById(identityId);
     const fate = getFateById(fateId);
-    const generation = state.meta.totalLives + 1;
-    const meta: MetaProgress = {
-      ...state.meta,
-      totalLives: generation,
-    };
-    const player = createPlayerForLife(name, generation, world, identity, fate, meta);
-    const life = createLifeState(generation, world, identity, fate);
+    const { meta, player, life } = createNewLife({
+      name,
+      world,
+      identity,
+      fate,
+      meta: state.meta,
+    });
+    const log = createLog(
+      player.generation,
+      "life",
+      `第 ${player.generation} 世開始：${world.worldName}，${identity.name}，命格「${fate.name}」。`,
+    );
     const nextState: GameStateData = {
       ...state,
       player,
@@ -202,13 +219,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       currentEvent: undefined,
       latestResult: undefined,
       currentPage: "main",
-      logs: appendLogs(state.logs, [
-        createLog(
-          generation,
-          "life",
-          `第 ${generation} 世開始：${world.name}，${identity.name}，命格「${fate.name}」。`,
-        ),
-      ]),
+      logs: appendLogs(state.logs, [log]),
+      lastActionMessage: log.message,
     };
 
     set(nextState);
@@ -234,17 +246,39 @@ export const useGameStore = create<GameStore>((set, get) => ({
     });
     const life: LifeState = {
       ...state.life,
-      yearsSurvived: outcome.player.age,
+      yearsSurvived: calculateYearsSurvived(outcome.player, state.life),
       highestRealmId: getHigherRealmId(
         state.life.highestRealmId,
         outcome.player.highestRealmId,
       ),
+      maxSingleCultivationGain: Math.max(
+        state.life.maxSingleCultivationGain,
+        outcome.gain,
+      ),
+      enlightenmentCount:
+        state.life.enlightenmentCount + (outcome.critical.important ? 1 : 0),
+      importantEventIds: outcome.critical.important
+        ? Array.from(
+            new Set([
+              ...state.life.importantEventIds,
+              `cultivation_${outcome.critical.tier}_${Date.now()}`,
+            ]),
+          )
+        : state.life.importantEventIds,
     };
-    const cultivationLog = createLog(
-      outcome.player.generation,
-      "cultivation",
-      `閉關修煉一年，修為 +${outcome.gain}。`,
+    const availableEvents = getAvailableEvents(
+      events,
+      world.eventPool,
+      outcome.player,
+      life,
     );
+    const currentEvent = outcome.eventTriggered
+      ? drawWeightedEvent(availableEvents, Math.random, outcome.player)
+      : undefined;
+    const message = currentEvent
+      ? `${outcome.critical.label}，修為 +${outcome.gain}（${outcome.critical.multiplier || "推滿"} 倍）。${outcome.critical.text} 並觸發事件「${currentEvent.title}」。`
+      : `${outcome.critical.label}，修為 +${outcome.gain}（${outcome.critical.multiplier || "推滿"} 倍）。${outcome.critical.text}`;
+    const cultivationLog = createLog(outcome.player.generation, "cultivation", message);
 
     if (outcome.deathReason) {
       const nextState = finalizeLife(
@@ -260,41 +294,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return;
     }
 
-    const availableEvents = getAvailableEvents(
-      events,
-      world.eventPool,
-      outcome.player,
-      life,
-    );
-    const currentEvent = outcome.eventTriggered
-      ? drawWeightedEvent(availableEvents)
-      : undefined;
-    const logs = appendLogs(state.logs, [
-      ...(currentEvent
-        ? [
-            createLog(
-              outcome.player.generation,
-              "event",
-              `修煉後觸發事件：${currentEvent.title}。`,
-            ),
-          ]
-        : []),
-      cultivationLog,
-    ]);
     const nextState: GameStateData = {
       ...state,
       player: outcome.player,
       life,
-      logs,
+      logs: appendLogs(state.logs, [cultivationLog]),
       currentEvent,
       currentPage: currentEvent ? "event" : state.currentPage,
+      lastActionMessage: message,
     };
 
     set(nextState);
     persist(nextState);
   },
 
-  attemptBreakthrough() {
+  attemptBreakthrough(methodId = "stable") {
     const state = get();
 
     if (!state.player || !state.life || !state.life.isAlive) {
@@ -310,16 +324,31 @@ export const useGameStore = create<GameStore>((set, get) => ({
       world,
       identity,
       fate,
+      methodId,
     });
     const life: LifeState = {
       ...state.life,
       objectiveCompleted:
         state.life.objectiveCompleted || outcome.objectiveCompleted,
-      yearsSurvived: outcome.player.age,
+      yearsSurvived: calculateYearsSurvived(outcome.player, state.life),
       highestRealmId: getHigherRealmId(
         state.life.highestRealmId,
         outcome.player.highestRealmId,
       ),
+      defyingBreakthroughCount:
+        state.life.defyingBreakthroughCount +
+        (outcome.success && outcome.method.id === "defy_heaven" ? 1 : 0),
+      reincarnationPointMultiplier:
+        state.life.reincarnationPointMultiplier +
+        outcome.reincarnationPointMultiplierDelta,
+      importantEventIds: outcome.important
+        ? Array.from(
+            new Set([
+              ...state.life.importantEventIds,
+              `breakthrough_${outcome.method.id}_${Date.now()}`,
+            ]),
+          )
+        : state.life.importantEventIds,
     };
     const breakthroughLog = createLog(
       outcome.player.generation,
@@ -360,6 +389,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       player: outcome.player,
       life,
       logs: appendLogs(state.logs, [breakthroughLog]),
+      lastActionMessage: outcome.message,
     };
 
     set(nextState);
@@ -380,20 +410,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
       state.player,
       state.life,
     );
-    const currentEvent = drawWeightedEvent(availableEvents);
+    const currentEvent = drawWeightedEvent(availableEvents, Math.random, state.player);
+    const log = currentEvent
+      ? createLog(
+          state.player.generation,
+          "event",
+          `歷練觸發事件：${currentEvent.title}。`,
+        )
+      : undefined;
     const nextState: GameStateData = {
       ...state,
       currentEvent,
       currentPage: "event",
-      logs: currentEvent
-        ? appendLogs(state.logs, [
-            createLog(
-              state.player.generation,
-              "event",
-              `歷練觸發事件：${currentEvent.title}。`,
-            ),
-          ])
-        : state.logs,
+      logs: log ? appendLogs(state.logs, [log]) : state.logs,
+      lastActionMessage: log?.message,
     };
 
     set(nextState);
@@ -425,11 +455,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       state.currentEvent,
       option,
     );
-    const resultLog = createLog(
-      resolved.player.generation,
-      "event",
-      `${state.currentEvent.title}：${resolved.result.description}`,
-    );
+    const changeSummary = summarizeEventResultChanges(resolved.result).join("、");
+    const message = `${state.currentEvent.title}：選擇「${option.text}」，${
+      resolved.success ? "成功" : "失敗"
+    }。${resolved.result.description} 變化：${changeSummary}。`;
+    const resultLog = createLog(resolved.player.generation, "event", message);
 
     if (resolved.deathReason) {
       const nextState = finalizeLife(
@@ -466,6 +496,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       currentEvent: undefined,
       currentPage: "event",
       logs: appendLogs(state.logs, [resultLog]),
+      lastActionMessage: message,
     };
 
     set(nextState);
@@ -500,6 +531,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           result.message,
         ),
       ]),
+      lastActionMessage: result.message,
     };
 
     set(nextState);
@@ -516,6 +548,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       currentEvent: undefined,
       latestResult: undefined,
       currentPage: "start",
+      lastActionMessage: undefined,
     });
   },
 }));

@@ -45,6 +45,18 @@ export type GameLogType =
 
 export type ReincarnationEndType = "death" | "objective" | "manual";
 
+export type EventRarity = "common" | "rare" | "epic" | "legendary" | "mythic";
+
+export type CultivationCriticalTier =
+  | "normal"
+  | "minor_insight"
+  | "deep_insight"
+  | "dao_enlightenment"
+  | "heaven_resonance"
+  | "defying_enlightenment";
+
+export type BreakthroughMethodId = "stable" | "force" | "defy_heaven";
+
 export interface ResourceMap {
   spiritStones: number;
   aura: number;
@@ -125,6 +137,7 @@ export interface LifeState {
   identityId: IdentityId;
   fateId: FateId;
   startedAt: string;
+  startingAge: number;
   endedAt?: string;
   isAlive: boolean;
   objectiveCompleted: boolean;
@@ -134,6 +147,13 @@ export interface LifeState {
   completedEventIds: EventId[];
   importantEventIds: EventId[];
   rareEventsCompleted: number;
+  epicEventsCompleted: number;
+  legendaryEventsCompleted: number;
+  mythicEventsCompleted: number;
+  enlightenmentCount: number;
+  maxSingleCultivationGain: number;
+  defyingBreakthroughCount: number;
+  reincarnationPointMultiplier: number;
   enemiesDefeated: number;
 }
 
@@ -156,10 +176,11 @@ export interface Realm {
   name: string;
   stageName: string;
   order: number;
-  cultivationRequired: number;
+  requiredCultivation: number;
   baseBreakthroughRate: number;
-  attributeBonus: Partial<AttributeMap>;
+  statBonus: Partial<AttributeMap>;
   lifespanBonus: number;
+  nextRealmId?: RealmId;
   unlocks: string[];
 }
 
@@ -168,7 +189,7 @@ export interface Identity {
   name: string;
   description: string;
   initialAge: number;
-  effects: GameModifier;
+  statModifiers: GameModifier;
   initialResources: Partial<ResourceMap>;
   advantages: string[];
   disadvantages: string[];
@@ -184,9 +205,9 @@ export interface Fate {
   description: string;
   effects: GameModifier;
   advantages: string[];
-  costs: string[];
+  downside: string[];
   suitableIdentityIds: IdentityId[];
-  upgradable: boolean;
+  upgradeable: boolean;
   isMvp: boolean;
 }
 
@@ -198,8 +219,8 @@ export interface WorldRule {
 }
 
 export interface World {
-  id: WorldId;
-  name: string;
+  worldId: WorldId;
+  worldName: string;
   worldType: string;
   difficulty: "low" | "medium" | "high";
   entryRequirement: string;
@@ -242,6 +263,7 @@ export interface EventResult {
   lifespanDelta?: number;
   resourcesDelta?: Partial<ResourceMap>;
   attributeDelta?: Partial<AttributeMap>;
+  reincarnationPointMultiplierDelta?: number;
   statusAdd?: PlayerStatus[];
   statusRemove?: PlayerStatus[];
   deathReason?: string;
@@ -274,6 +296,18 @@ export interface GameEvent {
   weight: number;
   tags: string[];
   type: EventType;
+  rarity: EventRarity;
+}
+
+export interface ReincarnationRewardBreakdown {
+  realmReward: number;
+  survivalReward: number;
+  eventReward: number;
+  breakthroughReward: number;
+  objectiveReward: number;
+  deathModifier: number;
+  achievementBonus: number;
+  multiplier: number;
 }
 
 export interface ReincarnationResult {
@@ -289,8 +323,15 @@ export interface ReincarnationResult {
   deathReason: string;
   endType: ReincarnationEndType;
   worldRating: string;
+  lifeTitle: string;
   score: number;
   earnedReincarnationPoints: number;
+  rewardBreakdown: ReincarnationRewardBreakdown;
+  maxSingleCultivationGain: number;
+  rareEventCount: number;
+  enlightenmentCount: number;
+  defyingBreakthroughCount: number;
+  nextLifeBonusSummary: string[];
   unlockedContent: string[];
   retainedBonuses: string[];
   createdAt: string;

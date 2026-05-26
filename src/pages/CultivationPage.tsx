@@ -5,52 +5,71 @@ import { useGameStore } from "../stores/gameStore";
 export function CultivationPage() {
   const { player, life, meta, world, identity, fate, nextRealm } = useCurrentGameData();
   const cultivateOnce = useGameStore((state) => state.cultivateOnce);
+  const lastActionMessage = useGameStore((state) => state.lastActionMessage);
 
   if (!player || !life || !world || !identity || !fate) {
     return null;
   }
 
   const gain = calculateCultivationGain({ player, meta, world, identity, fate });
+  const remainingToBreakthrough = nextRealm
+    ? Math.max(0, nextRealm.requiredCultivation - player.cultivation)
+    : 0;
+  const gained = lastActionMessage?.match(/\+(\d+)/)?.[1];
+  const isRareInsight =
+    Boolean(lastActionMessage?.includes("頓悟")) ||
+    Boolean(lastActionMessage?.includes("天道")) ||
+    Boolean(lastActionMessage?.includes("逆天"));
 
   return (
-    <main className="page-grid two-column">
-      <section className="panel">
-        <p className="eyebrow">修煉</p>
-        <h1>閉關運轉周天</h1>
+    <main className="page-grid two-column page-cultivation">
+      <section className="panel hero-panel cultivation-card">
+        <p className="eyebrow">洞府修煉</p>
+        <h1>盤膝入定，靈氣入體</h1>
         <p>
-          修煉一次消耗一年壽元，增加修為並有機率觸發事件。受傷、虛弱或心魔會降低效率。
+          靈氣沿經脈流轉，功法在識海中一遍遍運行。每一次修煉，都可能只是積累，也可能撞見一線天機。
         </p>
         <div className="status-grid">
-          <div>
+          <div className="stat-tile">
             <span>預估修為</span>
             <strong>+{gain}</strong>
           </div>
-          <div>
+          <div className="stat-tile">
             <span>目前修為</span>
             <strong>{player.cultivation}</strong>
           </div>
-          <div>
-            <span>下一門檻</span>
-            <strong>{nextRealm?.cultivationRequired ?? "上限"}</strong>
+          <div className="stat-tile">
+            <span>突破門檻</span>
+            <strong>{nextRealm?.requiredCultivation ?? "MVP 上限"}</strong>
           </div>
-          <div>
+          <div className="stat-tile">
             <span>剩餘壽元</span>
             <strong>{Math.max(0, player.lifespan - player.age)}</strong>
           </div>
+          <div className="stat-tile">
+            <span>距離突破</span>
+            <strong>{nextRealm ? remainingToBreakthrough : "已抵上限"}</strong>
+          </div>
         </div>
+        {lastActionMessage && (
+          <div className={`cultivation-result-card ${isRareInsight ? "pulse-gold" : ""}`}>
+            {gained && <span className="floating-gain">+{gained}</span>}
+            <p>{lastActionMessage}</p>
+          </div>
+        )}
         <button className="primary-action" type="button" onClick={cultivateOnce}>
-          修煉一年
+          運轉周天
         </button>
       </section>
 
-      <section className="panel">
-        <h2>加成來源</h2>
+      <section className="panel scene-panel">
+        <h2>修煉回饋</h2>
         <ul className="plain-list">
-          <li>世界規則：{world.worldRules.cultivationMultiplier}x</li>
-          <li>身份：{identity.name}</li>
-          <li>命格：{fate.name}</li>
-          <li>靈根、悟性、福緣共同影響修煉收益。</li>
-          <li>輪迴商店的修煉效率會套用到下一世。</li>
+          <li>普通修煉會穩定累積修為。</li>
+          <li>小有所悟、心有所感會讓修為成倍暴漲。</li>
+          <li>頓悟大道以上會進入修仙日誌，成為本世亮點。</li>
+          <li>逆天頓悟會直接把你推向當前境界突破門檻。</li>
+          <li>修為已滿時，主畫面與進度條會提示可以突破。</li>
         </ul>
       </section>
     </main>

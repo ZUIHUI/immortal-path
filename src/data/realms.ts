@@ -2,88 +2,93 @@ import type { Realm } from "../types";
 
 export const realms: Realm[] = [
   {
-    id: "mortal",
+    id: "realm_mortal",
     name: "凡人",
     stageName: "凡胎肉身",
     order: 0,
-    cultivationRequired: 0,
+    requiredCultivation: 0,
     baseBreakthroughRate: 0.95,
-    attributeBonus: {},
+    statBonus: {},
     lifespanBonus: 0,
+    nextRealmId: "realm_qi_refining_early",
     unlocks: ["基礎修煉"],
   },
   {
-    id: "qi_early",
+    id: "realm_qi_refining_early",
     name: "練氣",
     stageName: "初期",
     order: 1,
-    cultivationRequired: 80,
-    baseBreakthroughRate: 0.86,
-    attributeBonus: {
+    requiredCultivation: 45,
+    baseBreakthroughRate: 0.9,
+    statBonus: {
       maxHp: 18,
       attack: 3,
       defense: 2,
       divineSense: 2,
     },
     lifespanBonus: 10,
+    nextRealmId: "realm_qi_refining_middle",
     unlocks: ["歷練事件"],
   },
   {
-    id: "qi_middle",
+    id: "realm_qi_refining_middle",
     name: "練氣",
     stageName: "中期",
     order: 2,
-    cultivationRequired: 220,
-    baseBreakthroughRate: 0.76,
-    attributeBonus: {
+    requiredCultivation: 140,
+    baseBreakthroughRate: 0.82,
+    statBonus: {
       maxHp: 22,
       attack: 4,
       defense: 3,
       divineSense: 3,
     },
     lifespanBonus: 10,
+    nextRealmId: "realm_qi_refining_late",
     unlocks: ["宗門事件"],
   },
   {
-    id: "qi_late",
+    id: "realm_qi_refining_late",
     name: "練氣",
     stageName: "後期",
     order: 3,
-    cultivationRequired: 480,
-    baseBreakthroughRate: 0.66,
-    attributeBonus: {
+    requiredCultivation: 300,
+    baseBreakthroughRate: 0.74,
+    statBonus: {
       maxHp: 28,
       attack: 5,
       defense: 4,
       divineSense: 4,
     },
     lifespanBonus: 12,
+    nextRealmId: "realm_qi_refining_perfect",
     unlocks: ["高風險歷練"],
   },
   {
-    id: "qi_perfect",
+    id: "realm_qi_refining_perfect",
     name: "練氣",
     stageName: "圓滿",
     order: 4,
-    cultivationRequired: 850,
-    baseBreakthroughRate: 0.55,
-    attributeBonus: {
+    requiredCultivation: 560,
+    baseBreakthroughRate: 0.64,
+    statBonus: {
       maxHp: 36,
       attack: 7,
       defense: 5,
       divineSense: 6,
     },
     lifespanBonus: 15,
+    nextRealmId: "realm_foundation_early",
     unlocks: ["築基準備"],
   },
   {
-    id: "foundation_early",
+    id: "realm_foundation_early",
     name: "築基",
     stageName: "初期",
     order: 5,
-    cultivationRequired: 1400,
-    baseBreakthroughRate: 0.42,
-    attributeBonus: {
+    requiredCultivation: 900,
+    baseBreakthroughRate: 0.5,
+    statBonus: {
       maxHp: 60,
       attack: 12,
       defense: 9,
@@ -107,7 +112,7 @@ export function getRealmById(realmId: string): Realm {
 
 export function getNextRealm(realmId: string): Realm | undefined {
   const current = getRealmById(realmId);
-  return realms.find((realm) => realm.order === current.order + 1);
+  return current.nextRealmId ? getRealmById(current.nextRealmId) : undefined;
 }
 
 export function getHigherRealmId(a: string, b: string): string {

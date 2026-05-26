@@ -9,12 +9,12 @@ export function ReincarnationStartPage() {
   const meta = useGameStore((state) => state.meta);
   const startLife = useGameStore((state) => state.startLife);
   const [name, setName] = useState("");
-  const [worldId, setWorldId] = useState<WorldId>("qingyun_little_world");
-  const [identityId, setIdentityId] = useState<IdentityId>("village_orphan");
-  const [fateId, setFateId] = useState<FateId>("deep_fortune");
+  const [worldId, setWorldId] = useState<WorldId>("world_qingyun");
+  const [identityId, setIdentityId] = useState<IdentityId>("identity_orphan");
+  const [fateId, setFateId] = useState<FateId>("fate_deep_fortune");
 
   const selectedWorld = useMemo(
-    () => worlds.find((world) => world.id === worldId),
+    () => worlds.find((world) => world.worldId === worldId),
     [worldId],
   );
   const selectedIdentity = useMemo(
@@ -27,49 +27,53 @@ export function ReincarnationStartPage() {
   );
 
   return (
-    <main className="page-grid">
-      <section className="panel intro-panel">
-        <p className="eyebrow">開局轉生</p>
-        <h1>選擇這一世的起點</h1>
-        <p>
-          MVP 先開放青雲小界與三種身份、五種命格。資料都放在 data 目錄，
-          後續可直接擴充世界、身份、命格與事件池。
-        </p>
-        <label className="field">
-          <span>角色名稱</span>
-          <input
-            value={name}
-            placeholder={`第 ${meta.totalLives + 1} 世修士`}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </label>
+    <main className="page-grid page-start">
+      <section className="panel intro-panel hero-panel">
+        <div>
+          <p className="eyebrow">輪迴之門</p>
+          <h1>神魂歸位，重入青雲</h1>
+          <p>
+            星河轉動，命盤重開。選定世界、身份與命格，讓這一世從輪迴長河中浮現。
+          </p>
+          <label className="field">
+            <span>角色名稱</span>
+            <input
+              value={name}
+              placeholder={`第 ${meta.totalLives + 1} 世修士`}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </label>
+        </div>
+        <div className="destiny-wheel" aria-hidden="true" />
       </section>
 
       <section className="panel">
-        <h2>世界</h2>
+        <h2>選擇世界</h2>
         <div className="choice-grid">
-          {worlds.map((world) => {
-            const unlocked = meta.unlockedWorldIds.includes(world.id);
+          {worlds
+            .filter((world) => world.isMvp)
+            .map((world) => {
+              const unlocked = meta.unlockedWorldIds.includes(world.worldId);
 
-            return (
-              <button
-                className={`choice-card ${worldId === world.id ? "selected" : ""}`}
-                disabled={!unlocked}
-                key={world.id}
-                type="button"
-                onClick={() => setWorldId(world.id)}
-              >
-                <strong>{world.name}</strong>
-                <span>{world.worldType}</span>
-                <small>{unlocked ? world.mainObjective : world.unlockCondition}</small>
-              </button>
-            );
-          })}
+              return (
+                <button
+                  className={`choice-card ${worldId === world.worldId ? "selected" : ""}`}
+                  disabled={!unlocked}
+                  key={world.worldId}
+                  type="button"
+                  onClick={() => setWorldId(world.worldId)}
+                >
+                  <strong>{world.worldName}</strong>
+                  <span>{world.worldType}</span>
+                  <small>{unlocked ? world.mainObjective : world.unlockCondition}</small>
+                </button>
+              );
+            })}
         </div>
       </section>
 
       <section className="panel">
-        <h2>身份</h2>
+        <h2>選擇身份</h2>
         <div className="choice-grid">
           {identities
             .filter((identity) => identity.isMvp)
@@ -94,7 +98,7 @@ export function ReincarnationStartPage() {
       </section>
 
       <section className="panel">
-        <h2>命格</h2>
+        <h2>選擇命格</h2>
         <div className="choice-grid">
           {fates
             .filter((fate) => fate.isMvp)
@@ -103,7 +107,9 @@ export function ReincarnationStartPage() {
 
               return (
                 <button
-                  className={`choice-card ${fateId === fate.id ? "selected" : ""}`}
+                  className={`choice-card rarity-card rarity-rare ${
+                    fateId === fate.id ? "selected" : ""
+                  }`}
                   disabled={!unlocked}
                   key={fate.id}
                   type="button"
@@ -119,7 +125,7 @@ export function ReincarnationStartPage() {
       </section>
 
       <section className="panel start-summary">
-        <h2>本世預覽</h2>
+        <h2>本世命盤</h2>
         <div className="summary-reason">
           <span>世界目標</span>
           <p>{selectedWorld?.mainObjective}</p>
@@ -130,14 +136,14 @@ export function ReincarnationStartPage() {
         </div>
         <div className="summary-reason">
           <span>命格代價</span>
-          <p>{selectedFate?.costs.join("、")}</p>
+          <p>{selectedFate?.downside.join("、")}</p>
         </div>
         <button
-          className="primary-action"
+          className="primary-action pulse-gold"
           type="button"
           onClick={() => startLife({ name, worldId, identityId, fateId })}
         >
-          建立本世角色
+          踏入輪迴
         </button>
       </section>
     </main>

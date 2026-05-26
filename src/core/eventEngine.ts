@@ -7,15 +7,89 @@ import {
   clamp,
   removeStatuses,
 } from "./balance";
+import { checkDeath } from "./death";
 import type {
   EventOption,
   EventRequirement,
   EventResult,
+  EventRarity,
   GameEvent,
   LifeState,
   Player,
   ResourceMap,
 } from "../types";
+
+export const EVENT_RARITY_LABELS: Record<EventRarity, string> = {
+  common: "普通",
+  rare: "稀有",
+  epic: "史詩",
+  legendary: "傳說",
+  mythic: "神話",
+};
+
+export function getEventRarityMultiplier(rarity: EventRarity): number {
+  switch (rarity) {
+    case "common":
+      return 1;
+    case "rare":
+      return 2;
+    case "epic":
+      return 4;
+    case "legendary":
+      return 8;
+    case "mythic":
+      return 16;
+  }
+}
+
+function scalePositive(value: number | undefined, multiplier: number): number | undefined {
+  if (value === undefined || value <= 0) {
+    return value;
+  }
+
+  return Math.ceil(value * multiplier);
+}
+
+function scalePositiveRecord<T extends Record<string, number | undefined>>(
+  record: T | undefined,
+  multiplier: number,
+): T | undefined {
+  if (!record) {
+    return undefined;
+  }
+
+  const scaled = { ...record };
+
+  for (const [key, value] of Object.entries(record)) {
+    if (typeof value === "number" && value > 0) {
+      scaled[key as keyof T] = Math.ceil(value * multiplier) as T[keyof T];
+    }
+  }
+
+  return scaled;
+}
+
+export function applyEventRarityMultiplier(
+  result: EventResult,
+  rarity: EventRarity,
+): EventResult {
+  const multiplier = getEventRarityMultiplier(rarity);
+
+  return {
+    ...result,
+    cultivationDelta: scalePositive(result.cultivationDelta, multiplier),
+    hpDelta: scalePositive(result.hpDelta, rarity === "common" ? 1 : Math.min(2, multiplier)),
+    maxHpDelta: scalePositive(result.maxHpDelta, multiplier),
+    lifespanDelta: scalePositive(result.lifespanDelta, multiplier),
+    resourcesDelta: scalePositiveRecord(result.resourcesDelta, multiplier),
+    attributeDelta: scalePositiveRecord(
+      result.attributeDelta,
+      rarity === "legendary" || rarity === "mythic" ? Math.min(4, multiplier) : Math.min(2, multiplier),
+    ),
+    markImportant: result.markImportant || rarity !== "common",
+    rareEvent: result.rareEvent || rarity !== "common",
+  };
+}
 
 export function meetsEventRequirement(
   player: Player,
@@ -136,8 +210,23 @@ export function getAvailableEvents(
 export function drawWeightedEvent(
   events: GameEvent[],
   random = Math.random,
+  player?: Player,
 ): GameEvent | undefined {
-  const totalWeight = events.reduce((sum, event) => sum + event.weight, 0);
+  const getWeight = (event: GameEvent) => {
+    const luck = player?.luck ?? 0;
+    const rarityBoost =
+      event.rarity === "common"
+        ? 1
+        : event.rarity === "rare"
+          ? 1 + luck / 90
+          : event.rarity === "epic"
+            ? 1 + luck / 70
+            : event.rarity === "legendary"
+              ? 1 + luck / 55
+              : 1 + luck / 42;
+    return event.weight * rarityBoost;
+  };
+  const totalWeight = events.reduce((sum, event) => sum + getWeight(event), 0);
 
   if (totalWeight <= 0) {
     return events[0];
@@ -146,7 +235,7 @@ export function drawWeightedEvent(
   let cursor = random() * totalWeight;
 
   for (const event of events) {
-    cursor -= event.weight;
+    cursor -= getWeight(event);
 
     if (cursor <= 0) {
       return event;
@@ -162,41 +251,40 @@ function applyEventResult(
   event: GameEvent,
   result: EventResult,
 ): { player: Player; life: LifeState; deathReason?: string } {
+  const scaledResult = applyEventRarityMultiplier(result, event.rarity);
   let nextPlayer = {
     ...player,
-    cultivation: Math.max(0, player.cultivation + (result.cultivationDelta ?? 0)),
-    age: player.age + (result.ageDelta ?? 0),
-    hp: clamp(player.hp + (result.hpDelta ?? 0), 0, player.maxHp),
-    maxHp: Math.max(1, player.maxHp + (result.maxHpDelta ?? 0)),
-    lifespan: Math.max(1, player.lifespan + (result.lifespanDelta ?? 0)),
+    cultivation: Math.max(0, player.cultivation + (scaledResult.cultivationDelta ?? 0)),
+    age: player.age + (scaledResult.ageDelta ?? 0),
+    hp: clamp(player.hp + (scaledResult.hpDelta ?? 0), 0, player.maxHp),
+    maxHp: Math.max(1, player.maxHp + (scaledResult.maxHpDelta ?? 0)),
+    lifespan: Math.max(1, player.lifespan + (scaledResult.lifespanDelta ?? 0)),
   };
 
-  nextPlayer = applyAttributeDelta(nextPlayer, result.attributeDelta);
-  nextPlayer = applyResourceDelta(nextPlayer, result.resourcesDelta);
+  nextPlayer = applyAttributeDelta(nextPlayer, scaledResult.attributeDelta);
+  nextPlayer = applyResourceDelta(nextPlayer, scaledResult.resourcesDelta);
 
-  if (result.statusRemove) {
+  if (scaledResult.statusRemove) {
     nextPlayer = {
       ...nextPlayer,
-      status: removeStatuses(nextPlayer.status, result.statusRemove),
+      status: removeStatuses(nextPlayer.status, scaledResult.statusRemove),
     };
   }
 
-  if (result.statusAdd) {
+  if (scaledResult.statusAdd) {
     nextPlayer = {
       ...nextPlayer,
-      status: addStatuses(nextPlayer.status, result.statusAdd),
+      status: addStatuses(nextPlayer.status, scaledResult.statusAdd),
     };
   }
 
-  const deathReason =
-    result.deathReason ??
-    (nextPlayer.hp <= 0
-      ? `${event.title}中傷勢過重而亡`
-      : nextPlayer.age >= nextPlayer.lifespan
-        ? "壽元耗盡，魂歸輪迴"
-        : undefined);
+  const death = checkDeath(
+    nextPlayer,
+    scaledResult.deathReason ??
+      (nextPlayer.hp <= 0 ? `${event.title}中傷勢過重而亡` : undefined),
+  );
 
-  if (deathReason) {
+  if (death.isDead) {
     nextPlayer = {
       ...nextPlayer,
       hp: 0,
@@ -207,10 +295,11 @@ function applyEventResult(
   const completedEventIds = Array.from(
     new Set([...life.completedEventIds, event.eventId]),
   );
-  const importantEventIds = result.markImportant
+  const importantEventIds = scaledResult.markImportant
     ? Array.from(new Set([...life.importantEventIds, event.eventId]))
     : life.importantEventIds;
 
+  const rareEventIncrement = scaledResult.rareEvent ? 1 : 0;
   return {
     player: {
       ...nextPlayer,
@@ -219,13 +308,22 @@ function applyEventResult(
     },
     life: {
       ...life,
-      objectiveCompleted: life.objectiveCompleted || Boolean(result.completeObjective),
+      objectiveCompleted: life.objectiveCompleted || Boolean(scaledResult.completeObjective),
       completedEventIds,
       importantEventIds,
-      rareEventsCompleted: life.rareEventsCompleted + (result.rareEvent ? 1 : 0),
-      yearsSurvived: nextPlayer.age,
+      rareEventsCompleted: life.rareEventsCompleted + rareEventIncrement,
+      epicEventsCompleted:
+        life.epicEventsCompleted + (event.rarity === "epic" ? 1 : 0),
+      legendaryEventsCompleted:
+        life.legendaryEventsCompleted + (event.rarity === "legendary" ? 1 : 0),
+      mythicEventsCompleted:
+        life.mythicEventsCompleted + (event.rarity === "mythic" ? 1 : 0),
+      reincarnationPointMultiplier:
+        life.reincarnationPointMultiplier +
+        (scaledResult.reincarnationPointMultiplierDelta ?? 0),
+      yearsSurvived: Math.max(0, nextPlayer.age - life.startingAge),
     },
-    deathReason,
+    deathReason: death.reason,
   };
 }
 
@@ -269,12 +367,42 @@ export function resolveEventOption(
     success || !option.failureResult
       ? option.successResult
       : option.failureResult;
+  const scaledResult = applyEventRarityMultiplier(result, event.rarity);
   const applied = applyEventResult(player, life, event, result);
 
   return {
     ...applied,
     success,
-    result,
+    result: scaledResult,
     effectiveRate,
   };
+}
+
+export function summarizeEventResultChanges(result: EventResult): string[] {
+  const changes: string[] = [];
+
+  if (result.cultivationDelta) changes.push(`修為 ${result.cultivationDelta > 0 ? "+" : ""}${result.cultivationDelta}`);
+  if (result.ageDelta) changes.push(`時間 ${result.ageDelta > 0 ? "+" : ""}${result.ageDelta} 年`);
+  if (result.hpDelta) changes.push(`氣血 ${result.hpDelta > 0 ? "+" : ""}${result.hpDelta}`);
+  if (result.maxHpDelta) changes.push(`氣血上限 ${result.maxHpDelta > 0 ? "+" : ""}${result.maxHpDelta}`);
+  if (result.lifespanDelta) changes.push(`壽元 ${result.lifespanDelta > 0 ? "+" : ""}${result.lifespanDelta}`);
+
+  if (result.resourcesDelta) {
+    for (const [key, value] of Object.entries(result.resourcesDelta)) {
+      if (value) changes.push(`${key} ${value > 0 ? "+" : ""}${value}`);
+    }
+  }
+
+  if (result.attributeDelta) {
+    for (const [key, value] of Object.entries(result.attributeDelta)) {
+      if (value) changes.push(`${key} ${value > 0 ? "+" : ""}${value}`);
+    }
+  }
+
+  if (result.statusAdd?.length) changes.push(`新增狀態：${result.statusAdd.join("、")}`);
+  if (result.statusRemove?.length) changes.push(`移除狀態：${result.statusRemove.join("、")}`);
+  if (result.deathReason) changes.push(`死亡：${result.deathReason}`);
+  if (result.completeObjective) changes.push("完成世界目標");
+
+  return changes.length > 0 ? changes : ["無直接數值變化"];
 }

@@ -2,13 +2,13 @@ import type { World } from "../types";
 
 export const worlds: World[] = [
   {
-    id: "qingyun_little_world",
-    name: "青雲小界",
+    worldId: "world_qingyun",
+    worldName: "青雲小界",
     worldType: "凡人修仙",
     difficulty: "low",
     entryRequirement: "初始開放",
     mainObjective: "在壽元耗盡前成功築基",
-    objectiveRealmId: "foundation_early",
+    objectiveRealmId: "realm_foundation_early",
     timeLimit: 120,
     worldRules: {
       cultivationMultiplier: 1,
@@ -17,26 +17,26 @@ export const worlds: World[] = [
       lifespanLimit: 120,
     },
     eventPool: [
-      "qingyun_spirit_spring",
-      "qingyun_old_hunter",
-      "qingyun_sect_task",
-      "qingyun_family_scroll",
-      "qingyun_wild_beast",
-      "qingyun_herb_field",
-      "qingyun_market_day",
-      "qingyun_inner_demon",
-      "qingyun_rain_meditation",
-      "qingyun_abandoned_cave",
-      "qingyun_broken_sword",
-      "qingyun_medicine_elder",
-      "qingyun_bandit_road",
-      "qingyun_lamp_scripture",
-      "qingyun_fellow_disciple",
-      "qingyun_mortal_karma",
-      "qingyun_ancient_tree",
-      "qingyun_spirit_stone_mine",
-      "qingyun_thunder_night",
-      "qingyun_foundation_hint",
+      "event_qingyun_001",
+      "event_qingyun_002",
+      "event_qingyun_003",
+      "event_qingyun_004",
+      "event_qingyun_005",
+      "event_qingyun_006",
+      "event_qingyun_007",
+      "event_qingyun_008",
+      "event_qingyun_009",
+      "event_qingyun_010",
+      "event_qingyun_011",
+      "event_qingyun_012",
+      "event_qingyun_013",
+      "event_qingyun_014",
+      "event_qingyun_015",
+      "event_qingyun_016",
+      "event_qingyun_017",
+      "event_qingyun_018",
+      "event_qingyun_019",
+      "event_qingyun_020",
     ],
     rewardPool: ["輪迴點", "築基感悟", "青雲小界通關記憶"],
     deathPenalty: "本世資源清空，只保留輪迴點與前世記憶。",
@@ -45,8 +45,8 @@ export const worlds: World[] = [
     isMvp: true,
   },
   {
-    id: "blood_moon_domain",
-    name: "血月魔域",
+    worldId: "world_blood_moon",
+    worldName: "血月魔域",
     worldType: "魔修亂世",
     difficulty: "medium",
     entryRequirement: "未來開放：完成青雲小界一次",
@@ -66,8 +66,8 @@ export const worlds: World[] = [
     isMvp: false,
   },
   {
-    id: "dharma_ending_dynasty",
-    name: "末法王朝",
+    worldId: "world_dharma_ending_dynasty",
+    worldName: "末法王朝",
     worldType: "靈氣稀薄",
     difficulty: "medium",
     entryRequirement: "未來開放：前世記憶達 10",
@@ -87,8 +87,8 @@ export const worlds: World[] = [
     isMvp: false,
   },
   {
-    id: "ancient_sword_tomb",
-    name: "上古劍塚",
+    worldId: "world_ancient_sword_tomb",
+    worldName: "上古劍塚",
     worldType: "秘境試煉",
     difficulty: "high",
     entryRequirement: "未來開放：達到築基",
@@ -108,8 +108,8 @@ export const worlds: World[] = [
     isMvp: false,
   },
   {
-    id: "weird_immortal_city",
-    name: "詭道仙城",
+    worldId: "world_weird_immortal_city",
+    worldName: "詭道仙城",
     worldType: "詭異修仙",
     difficulty: "high",
     entryRequirement: "未來開放：完成任一中難度世界",
@@ -131,7 +131,7 @@ export const worlds: World[] = [
 ];
 
 export function getWorldById(worldId: string): World {
-  const world = worlds.find((item) => item.id === worldId);
+  const world = worlds.find((item) => item.worldId === worldId);
 
   if (!world) {
     throw new Error(`World not found: ${worldId}`);

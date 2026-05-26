@@ -1,3 +1,4 @@
+import { resourceVisuals } from "../constants/ui";
 import type { ResourceMap } from "../types";
 
 interface ResourcePanelProps {
@@ -5,31 +6,43 @@ interface ResourcePanelProps {
   reincarnationPoints: number;
 }
 
-const resourceLabels: Array<[keyof ResourceMap, string]> = [
-  ["spiritStones", "靈石"],
-  ["aura", "靈氣"],
-  ["pills", "丹藥"],
-  ["herbs", "藥草"],
-  ["artifacts", "法寶"],
-  ["destiny", "天命"],
-  ["karma", "因果"],
-  ["pastLifeMemory", "前世記憶"],
+const resourceKeys: Array<keyof ResourceMap> = [
+  "spiritStones",
+  "aura",
+  "pills",
+  "herbs",
+  "artifacts",
+  "destiny",
+  "karma",
+  "pastLifeMemory",
 ];
 
 export function ResourcePanel({ resources, reincarnationPoints }: ResourcePanelProps) {
   return (
     <section className="panel">
-      <h2>資源</h2>
+      <h2>資源命盤</h2>
       <div className="resource-grid">
-        {resourceLabels.map(([key, label]) => (
-          <div className="resource-item" key={key}>
-            <span>{label}</span>
-            <strong>{resources[key]}</strong>
-          </div>
-        ))}
-        <div className="resource-item highlight">
-          <span>輪迴點</span>
-          <strong>{reincarnationPoints}</strong>
+        {resourceKeys.map((key) => {
+          const visual = resourceVisuals[key];
+
+          return (
+            <div className="resource-item resource-chip" key={key}>
+              <span className={`resource-icon tone-${visual.tone}`}>{visual.icon}</span>
+              <span className="resource-value">
+                <span>{visual.label}</span>
+                <strong>{resources[key]}</strong>
+              </span>
+            </div>
+          );
+        })}
+        <div className="resource-item resource-chip highlight">
+          <span className={`resource-icon tone-${resourceVisuals.reincarnationPoints.tone}`}>
+            {resourceVisuals.reincarnationPoints.icon}
+          </span>
+          <span className="resource-value">
+            <span>{resourceVisuals.reincarnationPoints.label}</span>
+            <strong>{reincarnationPoints}</strong>
+          </span>
         </div>
       </div>
     </section>

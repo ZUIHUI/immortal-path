@@ -1,54 +1,117 @@
 import { SAVE_KEY, SAVE_VERSION } from "../constants/game";
 import type { SaveData } from "../types";
 
-function canUseStorage(): boolean {
-  return typeof window !== "undefined" && Boolean(window.localStorage);
+export interface StorageLike {
+  getItem: (key: string) => string | null;
+  setItem: (key: string, value: string) => void;
+  removeItem: (key: string) => void;
 }
 
-export const saveService = {
-  load(): SaveData | undefined {
-    if (!canUseStorage()) {
-      return undefined;
-    }
+export interface SaveResult {
+  ok: boolean;
+  compacted: boolean;
+  error?: unknown;
+}
 
-    const raw = window.localStorage.getItem(SAVE_KEY);
+function getDefaultStorage(): StorageLike | undefined {
+  if (typeof window === "undefined" || !window.localStorage) {
+    return undefined;
+  }
 
-    if (!raw) {
-      return undefined;
-    }
+  return window.localStorage;
+}
 
-    try {
-      const parsed = JSON.parse(raw) as SaveData;
+function compactSaveData(data: SaveData): SaveData {
+  return {
+    ...data,
+    logs: data.logs.slice(0, 30),
+    meta: {
+      ...data.meta,
+      history: data.meta.history.slice(0, 5),
+    },
+    currentEvent: undefined,
+  };
+}
 
-      if (parsed.version !== SAVE_VERSION) {
+export function createSaveService(storageProvider = getDefaultStorage) {
+  return {
+    load(): SaveData | undefined {
+      const storage = storageProvider();
+
+      if (!storage) {
         return undefined;
       }
 
-      return parsed;
-    } catch {
-      return undefined;
-    }
-  },
+      const raw = storage.getItem(SAVE_KEY);
 
-  save(data: SaveData): void {
-    if (!canUseStorage()) {
-      return;
-    }
+      if (!raw) {
+        return undefined;
+      }
 
-    window.localStorage.setItem(
-      SAVE_KEY,
-      JSON.stringify({
+      try {
+        const parsed = JSON.parse(raw) as SaveData;
+
+        if (parsed.version !== SAVE_VERSION) {
+          return undefined;
+        }
+
+        return parsed;
+      } catch {
+        return undefined;
+      }
+    },
+
+    save(data: SaveData): SaveResult {
+      const storage = storageProvider();
+
+      if (!storage) {
+        return {
+          ok: false,
+          compacted: false,
+          error: "storage_unavailable",
+        };
+      }
+
+      const payload = {
         ...data,
         savedAt: new Date().toISOString(),
-      }),
-    );
-  },
+      };
 
-  clear(): void {
-    if (!canUseStorage()) {
-      return;
-    }
+      try {
+        storage.setItem(SAVE_KEY, JSON.stringify(payload));
+        return {
+          ok: true,
+          compacted: false,
+        };
+      } catch (error) {
+        const compacted = compactSaveData(payload);
 
-    window.localStorage.removeItem(SAVE_KEY);
-  },
-};
+        try {
+          storage.setItem(SAVE_KEY, JSON.stringify(compacted));
+          return {
+            ok: true,
+            compacted: true,
+          };
+        } catch (retryError) {
+          return {
+            ok: false,
+            compacted: true,
+            error: retryError,
+          };
+        }
+      }
+    },
+
+    clear(): void {
+      const storage = storageProvider();
+
+      if (!storage) {
+        return;
+      }
+
+      storage.removeItem(SAVE_KEY);
+    },
+  };
+}
+
+export const saveService = createSaveService();

@@ -1,3 +1,4 @@
+import { shopEffectVisuals } from "../constants/ui";
 import { calculateShopItemCost } from "../core/balance";
 import { getShopItemEffectText } from "../core/reincarnation";
 import { reincarnationShopItems } from "../data/reincarnationShop";
@@ -9,11 +10,14 @@ export function ReincarnationShopPage() {
   const navigate = useGameStore((state) => state.navigate);
 
   return (
-    <main className="page-grid">
-      <section className="panel intro-panel">
-        <p className="eyebrow">輪迴商店</p>
-        <h1>把死亡變成下一世的起點</h1>
-        <p>目前輪迴點：{meta.reincarnationPoints}</p>
+    <main className="page-grid page-shop">
+      <section className="panel intro-panel hero-panel">
+        <p className="eyebrow">天道命盤</p>
+        <h1>前世不滅，皆為今生資糧</h1>
+        <p>
+          可用輪迴點：
+          <strong className="reincarnation-points count-up">{meta.reincarnationPoints}</strong>
+        </p>
       </section>
 
       <section className="shop-grid">
@@ -21,15 +25,19 @@ export function ReincarnationShopPage() {
           const level = meta.shopLevels[item.id] ?? 0;
           const capped = level >= item.maxLevel;
           const cost = calculateShopItemCost(item, level);
+          const visual = shopEffectVisuals[item.effectKey];
 
           return (
             <article className="panel shop-item" key={item.id}>
               <div className="section-heading">
-                <div>
-                  <h2>{item.name}</h2>
-                  <p>{item.description}</p>
+                <div className="shop-heading">
+                  <span className={`shop-icon tone-${visual.tone}`}>{visual.icon}</span>
+                  <div>
+                    <h2>{item.name}</h2>
+                    <p>{item.description}</p>
+                  </div>
                 </div>
-                <span className="badge">
+                <span className="badge badge-gold">
                   {level} / {item.maxLevel}
                 </span>
               </div>
@@ -41,7 +49,7 @@ export function ReincarnationShopPage() {
                 type="button"
                 onClick={() => buyShopItem(item.id)}
               >
-                {capped ? "已滿級" : `升級：${cost} 輪迴點`}
+                {capped ? "已達上限" : `消耗 ${cost} 輪迴點升級`}
               </button>
             </article>
           );
@@ -50,7 +58,7 @@ export function ReincarnationShopPage() {
 
       <section className="panel">
         <button type="button" onClick={() => navigate("start")}>
-          前往下一世選擇
+          再入青雲小界
         </button>
       </section>
     </main>

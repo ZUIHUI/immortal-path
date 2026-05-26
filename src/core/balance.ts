@@ -10,12 +10,12 @@ import type {
 } from "../types";
 
 export const BALANCE = {
-  baseCultivationGain: 12,
+  baseCultivationGain: 38,
   yearsPerCultivation: 1,
   yearsPerBreakthroughAttempt: 1,
-  eventChanceAfterCultivation: 0.18,
+  eventChanceAfterCultivation: 0.38,
   minBreakthroughRate: 0.05,
-  maxBreakthroughRate: 0.92,
+  maxBreakthroughRate: 0.97,
   maxEventSuccessRate: 0.97,
   minEventSuccessRate: 0.03,
 };

@@ -317,6 +317,10 @@ function getAiNarrativeFallbackReason(error: unknown): string {
     return "天機推演逾時，已改由既有事件推進";
   }
 
+  if (message.includes("今日天機推演次數已達上限")) {
+    return "今日天機推演次數已達上限，已改由既有事件推進";
+  }
+
   return "天機混沌，改由既有事件推進";
 }
 

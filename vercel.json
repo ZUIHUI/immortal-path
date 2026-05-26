@@ -6,6 +6,9 @@
     },
     "api/narrative/continue.ts": {
       "maxDuration": 30
+    },
+    "api/narrative/health.ts": {
+      "maxDuration": 15
     }
   }
 }

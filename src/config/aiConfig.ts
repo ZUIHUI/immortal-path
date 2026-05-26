@@ -1,14 +1,15 @@
 export const AI_CONFIG = {
-  narrativeModel: "gpt-4o-mini",
+  narrativeModel: "gpt-4.1-nano",
   maxRecentLogs: 5,
-  maxChoices: 4,
-  maxSuggestedEffects: 6,
-  maxContentChars: 320,
+  maxChoices: 2,
+  maxSuggestedEffects: 3,
+  maxContentChars: 180,
   fallbackToStaticEvents: true,
   schemaRetryCount: 0,
-  maxOutputTokens: 850,
-  temperature: 0.72,
-  requestTimeoutMs: 34_000,
+  maxOutputTokens: 750,
+  temperature: 0.55,
+  requestTimeoutMs: 12_000,
+  openAiRequestTimeoutMs: 8_500,
   dailyUsageLimit: 40,
 };
 

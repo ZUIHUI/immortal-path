@@ -62,16 +62,11 @@ function buildWorldSummary(worldId: string, player: NarrativePlayerSnapshot): st
 
 export function buildNarrativeSystemPrompt(): string {
   return [
-    "你是文字修仙、無限流、轉生重生遊戲的小說式敘事引擎。",
-    "請只輸出符合 JSON schema 的 JSON，不要輸出 Markdown，不要解釋。",
-    "正文風格必須像東方修仙小說，含場景描寫、修仙氛圍與選擇張力。",
-    "content 約 120 到 250 個中文字，不要白話流水帳，不要現代詞，不要提到 AI、模型、prompt、JSON、系統提示。",
-    "小說正文不可直接寫出精確數值，例如不要寫「修為 +50」。數值變化只能放入 suggestedEffects。",
-    "AI 只能建議 suggestedEffects，不能決定精確數字。",
-    "一次只生成一段場景，不要生成整世故事。",
-    "choices 必須 2 到 4 個，且每個選項要有 previewText 與 riskLevel。",
-    "suggestedEffects 最多 6 個，強度只能用 tiny/small/medium/large/huge。",
-    "死亡、突破、完成世界目標只能透過布林欄位提示，由遊戲核心再判斷套用。",
+    "你是文字修仙遊戲的小說式敘事引擎，只輸出符合 JSON schema 的 JSON。",
+    "content 用繁中修仙小說語氣，約 80 到 140 字，有場景、機緣與抉擇張力。",
+    "不要提到 AI、模型、prompt、JSON、系統提示；正文不要寫精確數值獎勵。",
+    "choices 固定 2 個；suggestedEffects 最多 3 個，只能用 tiny/small/medium/large/huge。",
+    "AI 只能建議 suggestedEffects，實際數值由遊戲核心計算。",
   ].join("\n");
 }
 
@@ -93,12 +88,11 @@ export function buildGenerateNarrativePrompt(payload: GenerateNarrativeScenePayl
     JSON.stringify(safeLogs(payload.recentLogs), null, 2),
     "",
     "平衡限制：",
-    "target 欄位若用於 resourceGain/resourceLoss，僅可使用：spiritStones、aura、pills、herbs、artifacts、destiny、karma、pastLifeMemory。",
-    "target 欄位若用於 statGain/statLoss，僅可使用：spiritualRoot、maxHp、divineSense、attack、defense、comprehension、luck、daoHeart、lifespan。",
-    "target 欄位若用於 statusGain，僅可使用：injured、weak、heart_demon。",
-    "common/rare 應以小到中等收益為主；epic 可以大收益；legendary/mythic 必須稀有且伴隨風險或代價。",
-    "不要讓凡人直接完成築基，除非 rarity 是 mythic 且 shouldTriggerBreakthrough=true。",
-    "不要在 content 中寫數字獎勵，請用 suggestedEffects 表示。",
+    "target 欄位白名單：",
+    "resource: spiritStones,aura,pills,herbs,artifacts,destiny,karma,pastLifeMemory。",
+    "stat: spiritualRoot,maxHp,divineSense,attack,defense,comprehension,luck,daoHeart,lifespan。",
+    "status: injured,weak,heart_demon。",
+    "common/rare 小中收益；epic 可大收益；legendary/mythic 必須稀有且有風險。",
   ].join("\n");
 }
 
@@ -132,11 +126,8 @@ export function buildContinueNarrativePrompt(payload: ContinueNarrativeScenePayl
     JSON.stringify(safeLogs(payload.recentLogs), null, 2),
     "",
     "延續要求：",
-    "target 欄位若用於 resourceGain/resourceLoss，僅可使用：spiritStones、aura、pills、herbs、artifacts、destiny、karma、pastLifeMemory。",
-    "target 欄位若用於 statGain/statLoss，僅可使用：spiritualRoot、maxHp、divineSense、attack、defense、comprehension、luck、daoHeart、lifespan。",
-    "target 欄位若用於 statusGain，僅可使用：injured、weak、heart_demon。",
-    "若選擇安全，應有較低風險與較小收益；若選擇貪婪或莽撞，可以提高 rarity 或風險。",
-    "若 shouldEndEvent=true，請讓內容形成一段明確收束，並給出結算式 logText。",
-    "若 shouldTriggerDeath=true，deathReason 必須是修仙小說式死因。",
+    "安全選擇低風險小收益；貪婪/莽撞可提高 rarity 或風險。",
+    "target 範圍同前：resource/stat/status 僅使用白名單欄位。",
+    "shouldEndEvent=true 時內容要收束；shouldTriggerDeath=true 時 deathReason 要像修仙死因。",
   ].join("\n");
 }

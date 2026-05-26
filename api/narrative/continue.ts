@@ -1,20 +1,27 @@
-import { parseBody, toApiErrorPayload } from "../../server/narrativeRouteUtils";
+import {
+  jsonResponse,
+  parseJsonBody,
+  toApiErrorPayload,
+} from "../../server/narrativeRouteUtils";
 
-export default async function handler(req: any, res: any) {
-  if (req.method !== "POST") {
-    res.status(405).json({ error: "Method not allowed" });
-    return;
-  }
+export const runtime = "nodejs";
+export const maxDuration = 30;
 
+export async function POST(request: Request): Promise<Response> {
   try {
     const { continueOpenAiNarrative } = await import("../../server/narrativeOpenAi");
-    const payload = parseBody(req);
+    const payload = await parseJsonBody(request);
     const result = await continueOpenAiNarrative(payload);
-    res.status(200).json(result);
+    return jsonResponse(result);
   } catch (error) {
     console.error("[narrative] continue route failed", error);
-    res
-      .status(500)
-      .json(toApiErrorPayload(error, "Failed to continue AI narrative scene"));
+    return jsonResponse(
+      toApiErrorPayload(error, "Failed to continue AI narrative scene"),
+      500,
+    );
   }
+}
+
+export function GET(): Response {
+  return jsonResponse({ error: "Method not allowed" }, 405);
 }

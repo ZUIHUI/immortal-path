@@ -1,5 +1,15 @@
-export function parseBody(req: { body?: unknown }) {
-  return typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+export async function parseJsonBody(request: Request) {
+  const body = await request.text();
+  return body ? JSON.parse(body) : undefined;
+}
+
+export function jsonResponse(payload: unknown, status = 200): Response {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+    },
+  });
 }
 
 export function toApiErrorPayload(error: unknown, fallback: string) {

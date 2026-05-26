@@ -1,15 +1,18 @@
 import { AI_CONFIG } from "../../src/config/aiConfig";
+import { jsonResponse } from "../../server/narrativeRouteUtils";
 
-export default async function handler(req: any, res: any) {
-  if (req.method !== "GET") {
-    res.status(405).json({ ok: false, error: "Method not allowed" });
-    return;
-  }
+export const runtime = "nodejs";
+export const maxDuration = 10;
 
-  res.status(200).json({
+export function GET(): Response {
+  return jsonResponse({
     ok: true,
     hasOpenAiKey: Boolean(process.env.OPENAI_API_KEY),
     model: AI_CONFIG.narrativeModel,
     nodeEnv: process.env.NODE_ENV ?? null,
   });
+}
+
+export function POST(): Response {
+  return jsonResponse({ ok: false, error: "Method not allowed" }, 405);
 }

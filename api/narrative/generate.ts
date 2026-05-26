@@ -1,4 +1,4 @@
-import { parseBody, toApiErrorPayload } from "./routeUtils";
+import { parseBody, toApiErrorPayload } from "../../server/narrativeRouteUtils";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {

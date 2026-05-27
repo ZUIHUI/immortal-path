@@ -2,7 +2,7 @@ import {
   generateNovelScene,
   parseBody,
   toApiErrorPayload,
-} from "./novelShared";
+} from "./novelShared.js";
 
 export default async function handler(request: any, response: any) {
   if (request.method !== "POST") {

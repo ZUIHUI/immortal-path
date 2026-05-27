@@ -10,10 +10,8 @@ import { useGameStore } from "./stores/gameStore";
 import type { GamePage } from "./types";
 
 const navItems: Array<{ page: GamePage; label: string }> = [
-  { page: "main", label: "洞府" },
-  { page: "cultivation", label: "修煉" },
-  { page: "breakthrough", label: "突破" },
-  { page: "event", label: "奇遇" },
+  { page: "main", label: "命盤" },
+  { page: "event", label: "劇情" },
   { page: "shop", label: "輪迴商店" },
 ];
 
@@ -50,7 +48,7 @@ export default function App() {
       <header className="app-header">
         <button className="brand-button" type="button" onClick={() => navigate("main")}>
           <span>{APP_NAME}</span>
-          <small>文字修仙 MVP</small>
+          <small>無限流輪迴 MVP</small>
         </button>
         <nav className="top-nav">
           {player && life?.isAlive ? (

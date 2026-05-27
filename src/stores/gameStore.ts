@@ -1,5 +1,8 @@
 import { create } from "zustand";
-import { attemptBreakthrough as runBreakthrough } from "../core/breakthrough";
+import {
+  attemptBreakthrough as runBreakthrough,
+  canBreakthrough,
+} from "../core/breakthrough";
 import {
   addStatuses,
   applyAttributeDelta,
@@ -28,6 +31,7 @@ import { hasMetWorldObjective } from "../core/worldObjective";
 import { events } from "../data/events";
 import { getFateById } from "../data/fates";
 import { getIdentityById } from "../data/identities";
+import { createInfiniteLifeSelection } from "../data/infiniteFlow";
 import { getHigherRealmId, getNextRealm } from "../data/realms";
 import { getShopItemById } from "../data/reincarnationShop";
 import { getWorldById } from "../data/worlds";
@@ -81,7 +85,10 @@ interface GameActions {
     worldId: WorldId;
     identityId: IdentityId;
     fateId: FateId;
+    storyPremiseId?: string;
+    storySeed?: string;
   }) => void;
+  startInfiniteLife: () => Promise<void>;
   cultivateOnce: () => void;
   attemptBreakthrough: (methodId?: BreakthroughMethodId) => void;
   drawEvent: () => void;
@@ -171,10 +178,15 @@ function getInitialState(): GameStateData {
   const loaded = saveService.load();
 
   if (loaded) {
+    const fallbackMeta = createInitialMeta();
     return {
       player: loaded.player,
       life: loaded.life,
-      meta: loaded.meta,
+      meta: {
+        ...fallbackMeta,
+        ...loaded.meta,
+        worldLegacyIds: loaded.meta.worldLegacyIds ?? [],
+      },
       logs: loaded.logs,
       currentEvent: loaded.currentEvent,
       latestResult: loaded.latestResult,
@@ -472,7 +484,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     persist(get());
   },
 
-  startLife({ name, worldId, identityId, fateId }) {
+  startLife({ name, worldId, identityId, fateId, storyPremiseId, storySeed }) {
     const state = get();
     const world = getWorldById(worldId);
     const identity = getIdentityById(identityId);
@@ -484,15 +496,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
       fate,
       meta: state.meta,
     });
+    const lifeWithStory: LifeState = {
+      ...life,
+      storyPremiseId,
+      storySeed: storySeed ?? createId("story"),
+    };
     const log = createLog(
       player.generation,
       "life",
-      `第 ${player.generation} 世開始：${world.worldName}，${identity.name}，命格「${fate.name}」。`,
+      `第 ${player.generation} 世墜入無限流：${world.worldName}，身份與命格已由輪迴自定。`,
     );
     const nextState: GameStateData = {
       ...state,
       player,
-      life,
+      life: lifeWithStory,
       meta,
       currentEvent: undefined,
       latestResult: undefined,
@@ -504,6 +521,30 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     set(nextState);
     persist(nextState);
+  },
+
+  async startInfiniteLife() {
+    const state = get();
+    const selection = createInfiniteLifeSelection(state.meta);
+
+    get().startLife({
+      name: selection.name,
+      worldId: selection.worldId,
+      identityId: selection.identityId,
+      fateId: selection.fateId,
+      storyPremiseId: selection.premise.id,
+      storySeed: createId("seed"),
+    });
+
+    const nextState: GameStateData = {
+      ...get(),
+      currentPage: "event",
+      lastActionMessage: `${selection.premise.title}：${selection.premise.openingText}`,
+    };
+
+    set(nextState);
+    persist(nextState);
+    await get().generateAiNarrativeEvent();
   },
 
   cultivateOnce() {
@@ -934,22 +975,72 @@ export const useGameStore = create<GameStore>((set, get) => ({
       "event",
       `${response.logText}${visibleText ? `｜${visibleText}` : ""}${warningsText}`,
     );
+    let narrativePlayer = applied.player;
+    let narrativeLife = applied.life;
+    let breakthroughHint = applied.breakthroughHint;
+    const autoBreakthroughLogs: GameLog[] = [];
+    let autoBreakthroughDeathReason: string | undefined;
+
+    if (!applied.deathReason && response.shouldTriggerBreakthrough && canBreakthrough(narrativePlayer)) {
+      const identity = getIdentityById(narrativeLife.identityId);
+      const fate = getFateById(narrativeLife.fateId);
+      const outcome = runBreakthrough({
+        player: narrativePlayer,
+        meta: state.meta,
+        world,
+        identity,
+        fate,
+        methodId: "stable",
+      });
+
+      narrativePlayer = outcome.player;
+      narrativeLife = {
+        ...narrativeLife,
+        objectiveCompleted: narrativeLife.objectiveCompleted || outcome.objectiveCompleted,
+        yearsSurvived: calculateYearsSurvived(outcome.player, narrativeLife),
+        highestRealmId: getHigherRealmId(
+          narrativeLife.highestRealmId,
+          outcome.player.highestRealmId,
+        ),
+        reincarnationPointMultiplier:
+          narrativeLife.reincarnationPointMultiplier +
+          outcome.reincarnationPointMultiplierDelta,
+        importantEventIds: outcome.important
+          ? Array.from(
+              new Set([
+                ...narrativeLife.importantEventIds,
+                `story_breakthrough_${outcome.method.id}_${Date.now()}`,
+              ]),
+            )
+          : narrativeLife.importantEventIds,
+      };
+      breakthroughHint = outcome.message;
+      autoBreakthroughDeathReason = outcome.deathReason;
+      autoBreakthroughLogs.push(
+        createLog(outcome.player.generation, "breakthrough", `劇情破境：${outcome.message}`),
+      );
+    }
+
     const completedObjectiveNow =
-      applied.life.objectiveCompleted && !state.life.objectiveCompleted;
+      narrativeLife.objectiveCompleted && !state.life.objectiveCompleted;
     const objectiveLog = completedObjectiveNow
       ? createObjectiveCompletionLog(
-          applied.player,
+          narrativePlayer,
           "青雲小界目標已完成。天機只是指明前路，此世仍可繼續向下一境界突破。",
         )
       : undefined;
-    const extraLogs = objectiveLog ? [objectiveLog, narrativeLog] : [narrativeLog];
+    const extraLogs = [
+      ...(objectiveLog ? [objectiveLog] : []),
+      ...autoBreakthroughLogs,
+      narrativeLog,
+    ];
 
-    if (applied.deathReason) {
+    if (applied.deathReason || autoBreakthroughDeathReason) {
       const nextState = finalizeLife(
         state,
-        applied.player,
-        applied.life,
-        applied.deathReason,
+        narrativePlayer,
+        narrativeLife,
+        applied.deathReason ?? autoBreakthroughDeathReason ?? "劇情破境失敗，身死道消",
         "death",
         extraLogs,
       );
@@ -960,11 +1051,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     const nextState: GameStateData = {
       ...state,
-      player: applied.player,
-      life: applied.life,
+      player: narrativePlayer,
+      life: narrativeLife,
       currentEvent: undefined,
-      currentPage:
-        response.shouldEndEvent && applied.breakthroughHint ? "breakthrough" : "event",
+      currentPage: "event",
       logs: appendLogs(state.logs, extraLogs),
       aiNarrativeState: {
         isLoading: false,
@@ -981,8 +1071,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         error: null,
       },
       lastActionMessage: completedObjectiveNow
-        ? `${narrativeLog.message} ${getObjectiveCompletionMessage(applied.player)}`
-        : applied.breakthroughHint ?? narrativeLog.message,
+        ? `${narrativeLog.message} ${getObjectiveCompletionMessage(narrativePlayer)}`
+        : breakthroughHint ?? narrativeLog.message,
     };
 
     set(nextState);
@@ -993,7 +1083,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const nextState: GameStateData = {
       ...get(),
       aiNarrativeState: createEmptyAiNarrativeState(),
-      currentPage: "main",
+      currentPage: "event",
     };
 
     set(nextState);

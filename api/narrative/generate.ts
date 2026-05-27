@@ -21,13 +21,31 @@ const FATE_NAMES: Record<string, string> = {
   fate_short_lived: "短命之相",
   fate_natural_dao_body: "天生道體",
 };
+const STAGES = [
+  ["early", "初期"],
+  ["middle", "中期"],
+  ["late", "後期"],
+  ["perfect", "圓滿"],
+] as const;
+const REALM_TRACKS = [
+  ["qi_refining", "練氣"],
+  ["foundation", "築基"],
+  ["core_formation", "金丹"],
+  ["nascent_soul", "元嬰"],
+  ["spirit_transformation", "化神"],
+  ["void_refinement", "煉虛"],
+  ["integration", "合體"],
+  ["mahayana", "大乘"],
+  ["tribulation", "渡劫"],
+  ["true_immortal", "真仙"],
+] as const;
 const REALM_NAMES: Record<string, string> = {
   realm_mortal: "凡人",
-  realm_qi_refining_early: "練氣初期",
-  realm_qi_refining_middle: "練氣中期",
-  realm_qi_refining_late: "練氣後期",
-  realm_qi_refining_perfect: "練氣圓滿",
-  realm_foundation_early: "築基初期",
+  ...Object.fromEntries(
+    REALM_TRACKS.flatMap(([track, name]) =>
+      STAGES.map(([stage, label]) => [`realm_${track}_${stage}`, `${name}${label}`]),
+    ),
+  ),
 };
 
 const TEXT_REPLACEMENTS: Record<string, string> = {
@@ -236,7 +254,20 @@ function extractOutputText(payload: any): string | undefined {
 }
 
 function buildSystemPrompt(): string {
-  return "繁中修仙事件，只回短鍵JSON。可見文字全中文無英文/底線/ID。c約70-110字，ch兩個，e最多兩個。數值只放e。done僅已達築基初期才true。";
+  return "繁中修仙事件，只回短鍵JSON。可見文字全中文無英文/底線/ID。c約70-110字，ch兩個，e最多兩個。數值只放e。修為達門檻可bt=true自動破境。done僅已達築基初期才true。";
+}
+
+function getStoryCue(realmId: string | undefined): string {
+  if (!realmId || realmId === "realm_mortal" || realmId.includes("qi_refining")) return "青雲入道，凡骨逆命，目標築基";
+  if (realmId.includes("foundation")) return "道基山河，內門爭鋒，目標金丹";
+  if (realmId.includes("core_formation")) return "金丹立誓，丹火淬道，目標元嬰";
+  if (realmId.includes("nascent_soul")) return "元嬰出竅，前世殘影，目標化神";
+  if (realmId.includes("spirit_transformation")) return "化神問道，界壁裂隙，目標煉虛";
+  if (realmId.includes("void_refinement")) return "煉虛觀界，因果界河，目標合體";
+  if (realmId.includes("integration")) return "合體鎮界，法相守門，目標大乘";
+  if (realmId.includes("mahayana")) return "大乘立道，眾生命數，目標渡劫";
+  if (realmId.includes("tribulation")) return "渡劫飛升，雷海清算，目標真仙";
+  return "真仙命盤，補天古卷，追尋輪迴源頭";
 }
 
 function buildGeneratePrompt(payload: any): string {
@@ -252,6 +283,8 @@ function buildGeneratePrompt(payload: any): string {
     `身:${displayName(IDENTITY_NAMES, player.identityId, "凡俗修士")}`,
     `命:${displayName(FATE_NAMES, player.fateId, "命格未明")}`,
     `境:${displayName(REALM_NAMES, player.realmId, "未知境界")} 修:${player.cultivation ?? 0}`,
+    `篇:${getStoryCue(player.realmId)}`,
+    `輪:${payload?.lifeState?.storySeed ?? "未知"} 開:${payload?.lifeState?.storyPremiseId ?? "未知"}`,
     `目標:達築基初期；未達則done=false`,
     `齡:${player.age ?? 0}/${player.lifespan ?? 0} 血:${player.hp ?? 0}/${player.maxHp ?? 0}`,
     `悟福心:${player.comprehension ?? 0}/${player.luck ?? 0}/${player.daoHeart ?? 0}`,

@@ -59,4 +59,20 @@ describe("gameStore progression milestones", () => {
     expect(after.latestResult).toBeUndefined();
     expect(after.lastActionMessage).toContain("繼續衝擊築基中期");
   });
+
+  it("starts an infinite-flow life with generated identity, fate, and premise", async () => {
+    const generateAiNarrativeEvent = vi
+      .spyOn(useGameStore.getState(), "generateAiNarrativeEvent")
+      .mockResolvedValue(undefined);
+
+    useGameStore.getState().resetSave();
+    await useGameStore.getState().startInfiniteLife();
+
+    const state = useGameStore.getState();
+    expect(state.player).toBeDefined();
+    expect(state.life?.storySeed).toBeDefined();
+    expect(state.life?.storyPremiseId).toMatch(/^premise_/);
+    expect(state.currentPage).toBe("event");
+    expect(generateAiNarrativeEvent).toHaveBeenCalledOnce();
+  });
 });

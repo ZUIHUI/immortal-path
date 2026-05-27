@@ -360,6 +360,17 @@ input:focus {
   color: var(--scroll-cream);
 }
 
+.story-panel .status-grid {
+  margin-top: 12px;
+}
+
+.story-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .resource-grid {
   grid-template-columns: repeat(auto-fit, minmax(124px, 1fr));
 }

@@ -18,10 +18,12 @@ import {
   createInitialMeta,
   createNewLife,
   createReincarnationResult,
+  applyReincarnationResult,
 } from "./reincarnation";
 import { getFateById } from "../data/fates";
 import { getIdentityById } from "../data/identities";
-import { getRealmById } from "../data/realms";
+import { getNextRealm, getRealmById, realms } from "../data/realms";
+import { getStoryChapterByRealmId, storyChapters } from "../data/storyChapters";
 import { reincarnationShopItems } from "../data/reincarnationShop";
 import { getWorldById } from "../data/worlds";
 import { events } from "../data/events";
@@ -217,6 +219,21 @@ describe("core game logic", () => {
     );
   });
 
+  it("retains a world legacy after reincarnation settlement", () => {
+    const fixture = createFixture();
+    const result = createReincarnationResult(
+      fixture.player,
+      fixture.life,
+      fixture.world,
+      "死於青雲試煉",
+      "death",
+    );
+    const meta = applyReincarnationResult(fixture.meta, result);
+
+    expect(result.worldLegacyId).toBe("legacy_qingyun_death_coin");
+    expect(meta.worldLegacyIds).toContain("legacy_qingyun_death_coin");
+  });
+
   it("calculates reincarnation shop upgrade cost", () => {
     const item = reincarnationShopItems[0];
 
@@ -240,5 +257,33 @@ describe("core game logic", () => {
     expect(getEventRarityMultiplier("mythic")).toBeGreaterThan(
       getEventRarityMultiplier("common"),
     );
+  });
+
+  it("defines a complete realm chain from mortal to true immortal perfection", () => {
+    const ids = new Set(realms.map((realm) => realm.id));
+    const orderedIds: string[] = [];
+    let current: ReturnType<typeof getRealmById> | undefined = getRealmById("realm_mortal");
+
+    while (current) {
+      orderedIds.push(current.id);
+      current = getNextRealm(current.id);
+    }
+
+    expect(ids.size).toBe(realms.length);
+    expect(orderedIds).toHaveLength(realms.length);
+    expect(orderedIds[0]).toBe("realm_mortal");
+    expect(orderedIds.at(-1)).toBe("realm_true_immortal_perfect");
+    expect(realms.find((realm) => realm.name === "渡劫")).toBeDefined();
+    expect(realms.find((realm) => realm.name === "真仙")).toBeDefined();
+  });
+
+  it("covers every realm with a story chapter", () => {
+    for (const realm of realms) {
+      const chapter = getStoryChapterByRealmId(realm.id);
+      expect(chapter.title.length).toBeGreaterThan(0);
+      expect(chapter.aiGuidance.length).toBeGreaterThan(0);
+    }
+
+    expect(storyChapters.at(-1)?.title).toBe("真仙命盤篇");
   });
 });

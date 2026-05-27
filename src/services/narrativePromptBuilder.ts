@@ -1,7 +1,9 @@
 import { AI_CONFIG } from "../config/aiConfig";
 import { getFateById } from "../data/fates";
 import { getIdentityById } from "../data/identities";
+import { getInfiniteStoryPremise } from "../data/infiniteFlow";
 import { getRealmById, getNextRealm } from "../data/realms";
+import { getStoryChapterByRealmId } from "../data/storyChapters";
 import { getWorldById } from "../data/worlds";
 import type {
   ContinueNarrativeScenePayload,
@@ -20,14 +22,17 @@ function safeLogs(logs: NarrativeLogSummary[]): NarrativeLogSummary[] {
 function buildPlayerSummary(player: NarrativePlayerSnapshot): string {
   const realm = getRealmById(player.realmId);
   const nextRealm = getNextRealm(player.realmId);
+  const storyChapter = getStoryChapterByRealmId(player.realmId);
   const cultivationProgress = nextRealm
     ? `${player.cultivation}/${nextRealm.requiredCultivation}`
-    : `${player.cultivation}/MVP上限`;
+    : `${player.cultivation}/目前上限`;
 
   return [
     `姓名：${player.name}`,
     `世代：第 ${player.generation} 世`,
     `境界：${realm.name}${realm.stageName}`,
+    `主線章節：${storyChapter.title}`,
+    `主線目標：${storyChapter.currentObjective}`,
     `最高境界：${getRealmById(player.highestRealmId).name}${getRealmById(player.highestRealmId).stageName}`,
     `年齡/壽元：${player.age}/${player.lifespan}`,
     `氣血：${player.hp}/${player.maxHp}`,
@@ -43,6 +48,7 @@ function buildWorldSummary(worldId: string, player: NarrativePlayerSnapshot): st
   const world = getWorldById(worldId);
   const identity = getIdentityById(player.identityId);
   const fate = getFateById(player.fateId);
+  const storyChapter = getStoryChapterByRealmId(player.realmId);
 
   return [
     `世界：${world.worldName}`,
@@ -57,6 +63,9 @@ function buildWorldSummary(worldId: string, player: NarrativePlayerSnapshot): st
     `命格：${fate.name}。${fate.description}`,
     `命格優勢：${fate.advantages.join("、")}`,
     `命格代價：${fate.downside.join("、")}`,
+    `當前劇情：${storyChapter.title}。${storyChapter.summary}`,
+    `劇情地點：${storyChapter.locations.join("、")}`,
+    `劇情語氣：${storyChapter.aiGuidance}`,
   ].join("\n");
 }
 
@@ -67,6 +76,7 @@ export function buildNarrativeSystemPrompt(): string {
     "不要提到 AI、模型、prompt、JSON、系統提示；正文不要寫精確數值獎勵。",
     "choices 固定 2 個；suggestedEffects 最多 3 個，只能用 tiny/small/medium/large/huge。",
     "AI 只能建議 suggestedEffects，實際數值由遊戲核心計算。",
+    "玩家不手動修煉；劇情應透過 suggestedEffects 推動修為、資源、狀態與破境契機。",
     "shouldCompleteWorldObjective 只有玩家實際達到世界目標境界時才可為 true；奇遇不能直接宣告通關。",
   ].join("\n");
 }
@@ -82,6 +92,7 @@ export function buildGenerateNarrativePrompt(payload: GenerateNarrativeScenePayl
     buildPlayerSummary(payload.playerSnapshot),
     "",
     `本世狀態：已存活 ${payload.lifeState.yearsSurvived} 年，最高境界 ${getRealmById(payload.lifeState.highestRealmId).name}${getRealmById(payload.lifeState.highestRealmId).stageName}，世界目標${payload.lifeState.objectiveCompleted ? "已完成" : "未完成"}。`,
+    `無限流開局：${getInfiniteStoryPremise(payload.lifeState.storyPremiseId)?.title ?? "未知開局"}，劇情種子 ${payload.lifeState.storySeed ?? "未定"}。`,
     `輪迴資訊：總世代 ${payload.metaProgress.totalLives}，可用輪迴點 ${payload.metaProgress.reincarnationPoints}，前世記憶 ${payload.metaProgress.pastLifeMemories}。`,
     `觸發來源：${payload.triggerType}`,
     "",
@@ -127,6 +138,7 @@ export function buildContinueNarrativePrompt(payload: ContinueNarrativeScenePayl
     JSON.stringify(safeLogs(payload.recentLogs), null, 2),
     "",
     "延續要求：",
+    `無限流開局：${getInfiniteStoryPremise(payload.lifeState.storyPremiseId)?.title ?? "未知開局"}，劇情種子 ${payload.lifeState.storySeed ?? "未定"}。`,
     "安全選擇低風險小收益；貪婪/莽撞可提高 rarity 或風險。",
     "target 範圍同前：resource/stat/status 僅使用白名單欄位。",
     "shouldEndEvent=true 時內容要收束；shouldTriggerDeath=true 時 deathReason 要像修仙死因。",

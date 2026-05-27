@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { AiNarrativeErrorFallback } from "../components/AiNarrativeErrorFallback";
 import { AiNarrativeEventView } from "../components/AiNarrativeEventView";
 import { EventCard } from "../components/EventCard";
@@ -13,6 +14,29 @@ export function EventPage() {
   const endAiNarrativeEvent = useGameStore((state) => state.endAiNarrativeEvent);
   const chooseEventOption = useGameStore((state) => state.chooseEventOption);
   const aiNarrativeState = useGameStore((state) => state.aiNarrativeState);
+  const player = useGameStore((state) => state.player);
+  const life = useGameStore((state) => state.life);
+
+  useEffect(() => {
+    if (
+      player &&
+      life?.isAlive &&
+      !currentEvent &&
+      !aiNarrativeState.active &&
+      !aiNarrativeState.currentScene &&
+      !aiNarrativeState.isLoading
+    ) {
+      void generateAiNarrativeEvent();
+    }
+  }, [
+    aiNarrativeState.active,
+    aiNarrativeState.currentScene,
+    aiNarrativeState.isLoading,
+    currentEvent,
+    generateAiNarrativeEvent,
+    life?.isAlive,
+    player,
+  ]);
 
   return (
     <main className="page-grid two-column page-event">
@@ -40,12 +64,10 @@ export function EventPage() {
             <p className="eyebrow">山海奇遇</p>
             <h1>雲霧翻湧，機緣將現</h1>
             <p>
-              青雲小界處處藏著機緣與危機。踏入古洞、遭遇散修、聽聞秘辛，每一次選擇都可能改寫此世命數。
+              無限流已經開始推進。你不需要手動修煉，只需在命運給出的抉擇點選擇方向。
             </p>
             {lastActionMessage && <p className="notice">{lastActionMessage}</p>}
-            <button className="primary-action" type="button" onClick={generateAiNarrativeEvent}>
-              天機推演
-            </button>
+            <p className="notice">天機正在自行展開下一幕……</p>
           </section>
         )}
       </section>

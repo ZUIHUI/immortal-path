@@ -1,5 +1,6 @@
 import { getHigherRealmId, getRealmById } from "../data/realms";
 import { reincarnationShopItems } from "../data/reincarnationShop";
+import { getWorldLegacyForOutcome } from "../data/worldLegacies";
 import {
   calculateShopItemCost,
   createId,
@@ -54,6 +55,7 @@ export function createInitialMeta(): MetaProgress {
       "fate_natural_dao_body",
     ],
     completedWorldIds: [],
+    worldLegacyIds: [],
     shopLevels: {},
     bestRealmId: "realm_mortal",
     history: [],
@@ -94,6 +96,18 @@ export function createPlayerForLife(
         }
       : undefined,
   );
+  const hasDeathCoin = meta.worldLegacyIds?.includes("legacy_qingyun_death_coin");
+  const hasFoundationSeed = meta.worldLegacyIds?.includes("legacy_qingyun_foundation_seed");
+  const hasCoreFlame = meta.worldLegacyIds?.includes("legacy_qingyun_core_flame");
+  const legacyMaxHpBonus = hasDeathCoin ? 12 : 0;
+  const legacyDaoHeartBonus = hasFoundationSeed ? 2 : 0;
+  const legacyComprehensionBonus = hasFoundationSeed ? 2 : 0;
+  const legacyDestinyBonus = hasCoreFlame ? 2 : 0;
+  const legacyMemoryBonus = hasDeathCoin ? 1 : 0;
+  const resourcesWithLegacies = mergeResources(resources, {
+    destiny: legacyDestinyBonus,
+    pastLifeMemory: legacyMemoryBonus,
+  });
 
   return {
     id: createId("player"),
@@ -108,21 +122,23 @@ export function createPlayerForLife(
     lifespan,
     spiritualRoot:
       BASE_ATTRIBUTES.spiritualRoot + (modifiers.spiritualRoot ?? 0),
-    hp: maxHp,
-    maxHp,
+    hp: maxHp + legacyMaxHpBonus,
+    maxHp: maxHp + legacyMaxHpBonus,
     divineSense: BASE_ATTRIBUTES.divineSense + (modifiers.divineSense ?? 0),
     attack: BASE_ATTRIBUTES.attack + (modifiers.attack ?? 0),
     defense: BASE_ATTRIBUTES.defense + (modifiers.defense ?? 0),
     comprehension:
       BASE_ATTRIBUTES.comprehension +
       (modifiers.comprehension ?? 0) +
-      metaBonuses.initialComprehension,
+      metaBonuses.initialComprehension +
+      legacyComprehensionBonus,
     luck: BASE_ATTRIBUTES.luck + (modifiers.luck ?? 0) + metaBonuses.initialLuck,
-    daoHeart: BASE_ATTRIBUTES.daoHeart + (modifiers.daoHeart ?? 0),
-    karma: resources.karma,
-    destiny: resources.destiny,
+    daoHeart:
+      BASE_ATTRIBUTES.daoHeart + (modifiers.daoHeart ?? 0) + legacyDaoHeartBonus,
+    karma: resourcesWithLegacies.karma,
+    destiny: resourcesWithLegacies.destiny,
     status: ["normal"],
-    resources,
+    resources: resourcesWithLegacies,
     completedEventIds: [],
     importantEventIds: [],
     unlockedWorldIds: meta.unlockedWorldIds,
@@ -247,6 +263,12 @@ export function createReincarnationResult(
   const highestRealm = getRealmById(player.highestRealmId);
   const breakdown = calculateRewardBreakdown(player, life);
   const earnedReincarnationPoints = calculateReincarnationPoints(breakdown);
+  const worldLegacy = getWorldLegacyForOutcome({
+    worldId: world.worldId,
+    endType,
+    objectiveCompleted: life.objectiveCompleted,
+    highestRealmId: player.highestRealmId,
+  });
   const score = Math.round(
     highestRealm.order * 22 +
       life.yearsSurvived * 0.8 +
@@ -279,10 +301,17 @@ export function createReincarnationResult(
     nextLifeBonusSummary: getNextLifeBonusSummaryFromMeta(
       applyReincarnationResultPreview(player, life, earnedReincarnationPoints),
     ),
+    worldLegacyId: worldLegacy?.id,
     unlockedContent: life.objectiveCompleted
       ? ["青雲小界通關記憶", "築基感悟"]
       : [],
-    retainedBonuses: ["輪迴點", "前世記憶", "已解鎖選項", "輪迴商店等級"],
+    retainedBonuses: [
+      "輪迴點",
+      "前世記憶",
+      "已解鎖選項",
+      "輪迴商店等級",
+      ...(worldLegacy ? [worldLegacy.name] : []),
+    ],
     createdAt: new Date().toISOString(),
   };
 }
@@ -319,6 +348,9 @@ export function applyReincarnationResult(
       ? Array.from(new Set([...meta.completedWorldIds, result.worldId]))
       : meta.completedWorldIds,
     bestRealmId: getHigherRealmId(meta.bestRealmId, result.highestRealmId),
+    worldLegacyIds: result.worldLegacyId
+      ? Array.from(new Set([...(meta.worldLegacyIds ?? []), result.worldLegacyId]))
+      : (meta.worldLegacyIds ?? []),
     history: [result, ...meta.history].slice(0, 20),
   };
 }

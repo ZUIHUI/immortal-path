@@ -58,7 +58,7 @@ export function AiNarrativeEventView({
       )}
       {state.currentScene.shouldEndEvent ? (
         <button className="primary-action" type="button" onClick={onEnd}>
-          收束此段因果
+          進入下一幕
         </button>
       ) : (
         <AiNarrativeChoiceList

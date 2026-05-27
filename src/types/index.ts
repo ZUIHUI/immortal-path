@@ -196,6 +196,8 @@ export interface LifeState {
   worldId: WorldId;
   identityId: IdentityId;
   fateId: FateId;
+  storySeed?: string;
+  storyPremiseId?: string;
   startedAt: string;
   startingAge: number;
   endedAt?: string;
@@ -226,6 +228,7 @@ export interface MetaProgress {
   unlockedIdentityIds: IdentityId[];
   unlockedFateIds: FateId[];
   completedWorldIds: WorldId[];
+  worldLegacyIds: string[];
   shopLevels: Record<ShopItemId, number>;
   bestRealmId: RealmId;
   history: ReincarnationResult[];
@@ -242,6 +245,39 @@ export interface Realm {
   lifespanBonus: number;
   nextRealmId?: RealmId;
   unlocks: string[];
+}
+
+export interface StoryChapter {
+  id: string;
+  title: string;
+  realmRange: {
+    minOrder: number;
+    maxOrder: number;
+  };
+  summary: string;
+  currentObjective: string;
+  nextObjective: string;
+  locations: string[];
+  themes: string[];
+  aiGuidance: string;
+  milestoneRealmIds: RealmId[];
+}
+
+export interface InfiniteStoryPremise {
+  id: string;
+  title: string;
+  openingText: string;
+  tone: string;
+  surpriseHook: string;
+}
+
+export interface WorldLegacy {
+  id: string;
+  worldId: WorldId;
+  name: string;
+  description: string;
+  effectSummary: string;
+  rarity: EventRarity;
 }
 
 export interface Identity {
@@ -506,6 +542,7 @@ export interface ReincarnationResult {
   enlightenmentCount: number;
   defyingBreakthroughCount: number;
   nextLifeBonusSummary: string[];
+  worldLegacyId?: string;
   unlockedContent: string[];
   retainedBonuses: string[];
   createdAt: string;

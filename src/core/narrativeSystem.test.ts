@@ -118,6 +118,7 @@ describe("AI narrative system", () => {
     expect(prompt).toContain(fixture.fate.name);
     expect(prompt).toContain("最近修仙日誌");
     expect(prompt).toContain("target 欄位");
+    expect(prompt).toContain("主線章節");
   });
 
   it("validates and parses AI response schema", () => {

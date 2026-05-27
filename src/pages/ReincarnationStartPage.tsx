@@ -1,150 +1,58 @@
-import { useMemo, useState } from "react";
-import { fates } from "../data/fates";
-import { identities } from "../data/identities";
-import { worlds } from "../data/worlds";
+import { infiniteStoryPremises } from "../data/infiniteFlow";
+import { getWorldLegacyById } from "../data/worldLegacies";
 import { useGameStore } from "../stores/gameStore";
-import type { FateId, IdentityId, WorldId } from "../types";
 
 export function ReincarnationStartPage() {
   const meta = useGameStore((state) => state.meta);
-  const startLife = useGameStore((state) => state.startLife);
-  const [name, setName] = useState("");
-  const [worldId, setWorldId] = useState<WorldId>("world_qingyun");
-  const [identityId, setIdentityId] = useState<IdentityId>("identity_orphan");
-  const [fateId, setFateId] = useState<FateId>("fate_deep_fortune");
-
-  const selectedWorld = useMemo(
-    () => worlds.find((world) => world.worldId === worldId),
-    [worldId],
-  );
-  const selectedIdentity = useMemo(
-    () => identities.find((identity) => identity.id === identityId),
-    [identityId],
-  );
-  const selectedFate = useMemo(
-    () => fates.find((fate) => fate.id === fateId),
-    [fateId],
-  );
+  const startInfiniteLife = useGameStore((state) => state.startInfiniteLife);
+  const legacies = meta.worldLegacyIds
+    .map((legacyId) => getWorldLegacyById(legacyId))
+    .filter((legacy): legacy is NonNullable<typeof legacy> => Boolean(legacy));
 
   return (
     <main className="page-grid page-start">
       <section className="panel intro-panel hero-panel">
         <div>
-          <p className="eyebrow">輪迴之門</p>
-          <h1>神魂歸位，重入青雲</h1>
+          <p className="eyebrow">無限流觸發</p>
+          <h1>不選命，不選身，只踏入下一場未知</h1>
           <p>
-            星河轉動，命盤重開。選定世界、身份與命格，讓這一世從輪迴長河中浮現。
+            輪迴長河會自行安排你的身份、命格與開局。你唯一要做的，是按下進入，然後在每個劇情抉擇點決定此世的方向。
           </p>
-          <label className="field">
-            <span>角色名稱</span>
-            <input
-              value={name}
-              placeholder={`第 ${meta.totalLives + 1} 世修士`}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </label>
+          <button className="primary-action pulse-gold" type="button" onClick={startInfiniteLife}>
+            進入無限流
+          </button>
         </div>
         <div className="destiny-wheel" aria-hidden="true" />
       </section>
 
-      <section className="panel">
-        <h2>選擇世界</h2>
-        <div className="choice-grid">
-          {worlds
-            .filter((world) => world.isMvp)
-            .map((world) => {
-              const unlocked = meta.unlockedWorldIds.includes(world.worldId);
-
-              return (
-                <button
-                  className={`choice-card ${worldId === world.worldId ? "selected" : ""}`}
-                  disabled={!unlocked}
-                  key={world.worldId}
-                  type="button"
-                  onClick={() => setWorldId(world.worldId)}
-                >
-                  <strong>{world.worldName}</strong>
-                  <span>{world.worldType}</span>
-                  <small>{unlocked ? world.mainObjective : world.unlockCondition}</small>
-                </button>
-              );
-            })}
+      <section className="panel scene-panel">
+        <h2>可能開局</h2>
+        <div className="choice-grid compact-choice">
+          {infiniteStoryPremises.map((premise) => (
+            <article className="choice-card" key={premise.id}>
+              <strong>{premise.title}</strong>
+              <span>{premise.tone}</span>
+              <small>{premise.surpriseHook}</small>
+            </article>
+          ))}
         </div>
       </section>
 
       <section className="panel">
-        <h2>選擇身份</h2>
-        <div className="choice-grid">
-          {identities
-            .filter((identity) => identity.isMvp)
-            .map((identity) => {
-              const unlocked = meta.unlockedIdentityIds.includes(identity.id);
-
-              return (
-                <button
-                  className={`choice-card ${identityId === identity.id ? "selected" : ""}`}
-                  disabled={!unlocked}
-                  key={identity.id}
-                  type="button"
-                  onClick={() => setIdentityId(identity.id)}
-                >
-                  <strong>{identity.name}</strong>
-                  <span>{identity.playstyle}</span>
-                  <small>{identity.description}</small>
-                </button>
-              );
-            })}
-        </div>
-      </section>
-
-      <section className="panel">
-        <h2>選擇命格</h2>
-        <div className="choice-grid">
-          {fates
-            .filter((fate) => fate.isMvp)
-            .map((fate) => {
-              const unlocked = meta.unlockedFateIds.includes(fate.id);
-
-              return (
-                <button
-                  className={`choice-card rarity-card rarity-rare ${
-                    fateId === fate.id ? "selected" : ""
-                  }`}
-                  disabled={!unlocked}
-                  key={fate.id}
-                  type="button"
-                  onClick={() => setFateId(fate.id)}
-                >
-                  <strong>{fate.name}</strong>
-                  <span>{fate.advantages.join("、")}</span>
-                  <small>{fate.description}</small>
-                </button>
-              );
-            })}
-        </div>
-      </section>
-
-      <section className="panel start-summary">
-        <h2>本世命盤</h2>
-        <div className="summary-reason">
-          <span>世界目標</span>
-          <p>{selectedWorld?.mainObjective}</p>
-        </div>
-        <div className="summary-reason">
-          <span>身份特性</span>
-          <p>{selectedIdentity?.advantages.join("、")}</p>
-        </div>
-        <div className="summary-reason">
-          <span>命格代價</span>
-          <p>{selectedFate?.downside.join("、")}</p>
-        </div>
-        <button
-          className="primary-action pulse-gold"
-          type="button"
-          onClick={() => startLife({ name, worldId, identityId, fateId })}
-        >
-          踏入輪迴
-        </button>
+        <h2>輪迴留存</h2>
+        {legacies.length > 0 ? (
+          <div className="choice-grid compact-choice">
+            {legacies.map((legacy) => (
+              <article className={`choice-card rarity-card rarity-${legacy.rarity}`} key={legacy.id}>
+                <strong>{legacy.name}</strong>
+                <span>{legacy.effectSummary}</span>
+                <small>{legacy.description}</small>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="muted">尚未保留任何世界遺物。死亡、完成目標或抵達更高境界後，輪迴會留下可帶入下一世的痕跡。</p>
+        )}
       </section>
     </main>
   );

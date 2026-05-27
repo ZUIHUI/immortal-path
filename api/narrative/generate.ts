@@ -1,3 +1,5 @@
+import { generateOpenAiNarrative } from "../../server/narrativeOpenAi";
+
 function parseBody(request: { body?: unknown }) {
   return typeof request.body === "string" ? JSON.parse(request.body) : request.body;
 }
@@ -23,7 +25,6 @@ function toApiErrorPayload(error: unknown, fallback: string) {
 
 async function handleGenerate(request: any) {
   try {
-    const { generateOpenAiNarrative } = await import("../../server/narrativeOpenAi");
     return await generateOpenAiNarrative(parseBody(request));
   } catch (error) {
     console.error("[narrative] generate route failed", error);

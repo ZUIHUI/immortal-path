@@ -8,8 +8,8 @@ export const AI_CONFIG = {
   schemaRetryCount: 0,
   maxOutputTokens: 750,
   temperature: 0.55,
-  requestTimeoutMs: 20_000,
-  openAiRequestTimeoutMs: 12_000,
+  requestTimeoutMs: 28_000,
+  openAiRequestTimeoutMs: 24_000,
   dailyUsageLimit: 40,
 };
 

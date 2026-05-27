@@ -1,3 +1,5 @@
+import { probeOpenAiNarrativeConnection } from "../../server/narrativeOpenAi";
+
 const NARRATIVE_MODEL = "gpt-4.1-nano";
 
 function toApiErrorPayload(error: unknown, fallback: string) {
@@ -34,9 +36,6 @@ async function handleHealth(request: any) {
 
   if (probe === "openai") {
     try {
-      const { probeOpenAiNarrativeConnection } = await import(
-        "../../server/narrativeOpenAi"
-      );
       openAiProbe = await probeOpenAiNarrativeConnection();
     } catch (error) {
       openAiProbe = toApiErrorPayload(error, "OpenAI probe failed");

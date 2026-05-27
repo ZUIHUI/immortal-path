@@ -1,3 +1,5 @@
+import { continueOpenAiNarrative } from "../../server/narrativeOpenAi";
+
 function parseBody(request: { body?: unknown }) {
   return typeof request.body === "string" ? JSON.parse(request.body) : request.body;
 }
@@ -23,7 +25,6 @@ function toApiErrorPayload(error: unknown, fallback: string) {
 
 async function handleContinue(request: any) {
   try {
-    const { continueOpenAiNarrative } = await import("../../server/narrativeOpenAi");
     return await continueOpenAiNarrative(parseBody(request));
   } catch (error) {
     console.error("[narrative] continue route failed", error);

@@ -32,6 +32,11 @@ export function PlayerStatusCard({
   const lifespanLeft = Math.max(0, player.lifespan - player.age);
   const hpRatio = player.maxHp > 0 ? player.hp / player.maxHp : 0;
   const danger = lifespanLeft <= 10 || hpRatio <= 0.35;
+  const objectiveText = life.objectiveCompleted
+    ? nextRealm
+      ? `青雲目標已成，下一境界：${formatRealmName(nextRealm.name, nextRealm.stageName)}`
+      : "青雲目標已成，可主動入輪迴"
+    : world.mainObjective;
 
   return (
     <section className="panel status-card scene-panel">
@@ -80,7 +85,7 @@ export function PlayerStatusCard({
         </div>
         <div className="stat-tile">
           <span>目前目標</span>
-          <strong>{life.objectiveCompleted ? "築基已成" : world.mainObjective}</strong>
+          <strong>{objectiveText}</strong>
         </div>
       </div>
 

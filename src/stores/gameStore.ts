@@ -28,7 +28,7 @@ import { hasMetWorldObjective } from "../core/worldObjective";
 import { events } from "../data/events";
 import { getFateById } from "../data/fates";
 import { getIdentityById } from "../data/identities";
-import { getHigherRealmId } from "../data/realms";
+import { getHigherRealmId, getNextRealm } from "../data/realms";
 import { getShopItemById } from "../data/reincarnationShop";
 import { getWorldById } from "../data/worlds";
 import { SAVE_VERSION } from "../constants/game";
@@ -113,6 +113,25 @@ function createLog(
 
 function appendLogs(logs: GameLog[], additions: GameLog[]): GameLog[] {
   return [...additions, ...logs].slice(0, 100);
+}
+
+function createObjectiveCompletionLog(player: Player, message?: string): GameLog {
+  return createLog(
+    player.generation,
+    "breakthrough",
+    message ??
+      "青雲小界目標已完成。這只是此世仙途的一道門檻，你仍可繼續突破，或自行選擇輪迴結算。",
+  );
+}
+
+function getObjectiveCompletionMessage(player: Player): string {
+  const nextRealm = getNextRealm(player.realmId);
+
+  if (!nextRealm) {
+    return "青雲小界目標已完成。你已抵達目前可修行的最高境界，可自行選擇輪迴結算。";
+  }
+
+  return `青雲小界目標已完成。下一步可繼續衝擊${nextRealm.name}${nextRealm.stageName}，也可自行選擇輪迴結算。`;
 }
 
 function createEmptyAiNarrativeState(): AiNarrativeState {
@@ -615,6 +634,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       "breakthrough",
       outcome.message,
     );
+    const completedObjectiveNow =
+      outcome.objectiveCompleted && !state.life.objectiveCompleted;
+    const objectiveLog = completedObjectiveNow
+      ? createObjectiveCompletionLog(outcome.player)
+      : undefined;
 
     if (outcome.deathReason) {
       const nextState = finalizeLife(
@@ -630,26 +654,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return;
     }
 
-    if (outcome.objectiveCompleted) {
-      const nextState = finalizeLife(
-        state,
-        outcome.player,
-        life,
-        "完成青雲小界目標：成功築基",
-        "objective",
-        [breakthroughLog],
-      );
-      set(nextState);
-      persist(nextState);
-      return;
-    }
-
     const nextState: GameStateData = {
       ...state,
       player: outcome.player,
       life,
-      logs: appendLogs(state.logs, [breakthroughLog]),
-      lastActionMessage: outcome.message,
+      logs: appendLogs(
+        state.logs,
+        objectiveLog ? [objectiveLog, breakthroughLog] : [breakthroughLog],
+      ),
+      lastActionMessage: completedObjectiveNow
+        ? `${outcome.message} ${getObjectiveCompletionMessage(outcome.player)}`
+        : outcome.message,
     };
 
     set(nextState);
@@ -721,6 +736,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       resolved.success ? "成功" : "失敗"
     }。${resolved.result.description} 變化：${changeSummary}。`;
     const resultLog = createLog(resolved.player.generation, "event", message);
+    const completedObjectiveNow =
+      resolved.life.objectiveCompleted && !state.life.objectiveCompleted;
+    const objectiveLog = completedObjectiveNow
+      ? createObjectiveCompletionLog(
+          resolved.player,
+          "青雲小界目標已完成。奇遇只是推開了門，此世修行仍可繼續向上。",
+        )
+      : undefined;
 
     if (resolved.deathReason) {
       const nextState = finalizeLife(
@@ -736,28 +759,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return;
     }
 
-    if (resolved.life.objectiveCompleted && !state.life.objectiveCompleted) {
-      const nextState = finalizeLife(
-        state,
-        resolved.player,
-        resolved.life,
-        "完成世界目標，主動歸入輪迴",
-        "objective",
-        [resultLog],
-      );
-      set(nextState);
-      persist(nextState);
-      return;
-    }
-
     const nextState: GameStateData = {
       ...state,
       player: resolved.player,
       life: resolved.life,
       currentEvent: undefined,
       currentPage: "event",
-      logs: appendLogs(state.logs, [resultLog]),
-      lastActionMessage: message,
+      logs: appendLogs(state.logs, objectiveLog ? [objectiveLog, resultLog] : [resultLog]),
+      lastActionMessage: completedObjectiveNow
+        ? `${message} ${getObjectiveCompletionMessage(resolved.player)}`
+        : message,
     };
 
     set(nextState);
@@ -923,7 +934,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       "event",
       `${response.logText}${visibleText ? `｜${visibleText}` : ""}${warningsText}`,
     );
-    const extraLogs = [narrativeLog];
+    const completedObjectiveNow =
+      applied.life.objectiveCompleted && !state.life.objectiveCompleted;
+    const objectiveLog = completedObjectiveNow
+      ? createObjectiveCompletionLog(
+          applied.player,
+          "青雲小界目標已完成。天機只是指明前路，此世仍可繼續向下一境界突破。",
+        )
+      : undefined;
+    const extraLogs = objectiveLog ? [objectiveLog, narrativeLog] : [narrativeLog];
 
     if (applied.deathReason) {
       const nextState = finalizeLife(
@@ -932,20 +951,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
         applied.life,
         applied.deathReason,
         "death",
-        extraLogs,
-      );
-      set(nextState);
-      persist(nextState);
-      return;
-    }
-
-    if (applied.life.objectiveCompleted && !state.life.objectiveCompleted) {
-      const nextState = finalizeLife(
-        state,
-        applied.player,
-        applied.life,
-        response.logText || "AI 劇情完成世界目標。",
-        "objective",
         extraLogs,
       );
       set(nextState);
@@ -975,7 +980,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
         ].slice(0, 20),
         error: null,
       },
-      lastActionMessage: applied.breakthroughHint ?? narrativeLog.message,
+      lastActionMessage: completedObjectiveNow
+        ? `${narrativeLog.message} ${getObjectiveCompletionMessage(applied.player)}`
+        : applied.breakthroughHint ?? narrativeLog.message,
     };
 
     set(nextState);

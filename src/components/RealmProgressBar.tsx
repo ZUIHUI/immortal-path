@@ -24,7 +24,7 @@ export function RealmProgressBar({
         <span>
           {nextRealm
             ? `${player.cultivation} / ${nextRealm.requiredCultivation}`
-            : "MVP 上限"}
+            : "目前上限"}
         </span>
       </div>
       <div
@@ -39,7 +39,7 @@ export function RealmProgressBar({
           {ready ? "，靈氣已滿，可嘗試突破。" : ""}
         </p>
       ) : (
-        <p className="muted">你已抵達目前 MVP 的修行盡頭。</p>
+        <p className="muted">你已抵達目前版本的修行盡頭。</p>
       )}
     </div>
   );

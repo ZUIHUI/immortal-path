@@ -40,7 +40,7 @@ export function CultivationPage() {
           </div>
           <div className="stat-tile">
             <span>突破門檻</span>
-            <strong>{nextRealm?.requiredCultivation ?? "MVP 上限"}</strong>
+            <strong>{nextRealm?.requiredCultivation ?? "目前上限"}</strong>
           </div>
           <div className="stat-tile">
             <span>剩餘壽元</span>
@@ -48,7 +48,7 @@ export function CultivationPage() {
           </div>
           <div className="stat-tile">
             <span>距離突破</span>
-            <strong>{nextRealm ? remainingToBreakthrough : "已抵上限"}</strong>
+            <strong>{nextRealm ? remainingToBreakthrough : "已達目前上限"}</strong>
           </div>
         </div>
         {lastActionMessage && (

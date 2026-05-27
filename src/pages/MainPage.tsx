@@ -42,11 +42,15 @@ export function MainPage() {
     ? Math.max(0, nextRealm.requiredCultivation - player.cultivation)
     : 0;
   const canBreak = nextRealm && remainingCultivation <= 0;
-  const recommendation = canBreak
-    ? "修為已滿，建議準備突破。"
-    : remainingCultivation <= cultivationGain * 2
-      ? "距離突破很近，再修煉一兩次即可衝關。"
-      : "先在洞府修煉，等待奇遇與頓悟。";
+  const recommendation = life.objectiveCompleted
+    ? nextRealm
+      ? `青雲目標已成，可繼續衝擊${formatRealmName(nextRealm.name, nextRealm.stageName)}。`
+      : "青雲目標已成，已抵達目前境界上限，可主動輪迴結算。"
+    : canBreak
+      ? "修為已滿，建議準備突破。"
+      : remainingCultivation <= cultivationGain * 2
+        ? "距離突破很近，再修煉一兩次即可衝關。"
+        : "先在洞府修煉，等待奇遇與頓悟。";
 
   return (
     <main className="page-grid two-column page-main">
@@ -66,7 +70,7 @@ export function MainPage() {
           <div className="status-grid compact">
             <div className="stat-tile">
               <span>距離下個境界</span>
-              <strong>{nextRealm ? remainingCultivation : "MVP 上限"}</strong>
+              <strong>{nextRealm ? remainingCultivation : "目前上限"}</strong>
             </div>
             <div className="stat-tile">
               <span>目前修煉效率</span>
@@ -100,15 +104,20 @@ export function MainPage() {
             </button>
           </div>
           {life.objectiveCompleted && life.isAlive && (
-            <button
-              className="primary-action"
-              type="button"
-              onClick={() =>
-                settleCurrentLife("已完成青雲小界目標，神魂帶著築基道韻歸入輪迴。", "objective")
-              }
-            >
-              完成本世結算
-            </button>
+            <div className="notice">
+              <p>
+                青雲小界目標已完成。你可以繼續修煉突破，也可以主動入輪迴，把本世成果結算成輪迴點。
+              </p>
+              <button
+                className="primary-action"
+                type="button"
+                onClick={() =>
+                  settleCurrentLife("已完成青雲小界目標，主動攜築基道韻歸入輪迴。", "objective")
+                }
+              >
+                主動入輪迴結算
+              </button>
+            </div>
           )}
         </section>
       </div>

@@ -56,7 +56,7 @@ export function BreakthroughPage() {
                 nextRealm.name,
                 nextRealm.stageName,
               )}`
-            : "已達 MVP 上限"}
+            : "已達目前境界上限"}
         </h1>
         <p>
           靈氣壓入丹田，道基在生死之間成形。選擇突破方式，決定這一世是穩紮穩打，還是逆天改命。

@@ -1,4 +1,7 @@
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
+const DEFAULT_MAIN_MODEL = "gpt-5.5";
+const DEFAULT_QUICK_MODEL = "gpt-5.4-mini";
+const DEFAULT_FALLBACK_MODEL = "gpt-4.1";
 
 function normalizeOpenAiModelSlug(value, fallback) {
   const model = String(value ?? "").trim();
@@ -15,9 +18,11 @@ function normalizeOpenAiModelSlug(value, fallback) {
 }
 
 const MAIN_MODEL =
-  normalizeOpenAiModelSlug(process.env.OPENAI_NOVEL_MODEL ?? process.env.OPENAI_MODEL, "gpt-5.5");
+  normalizeOpenAiModelSlug(process.env.OPENAI_NOVEL_MODEL ?? process.env.OPENAI_MODEL, DEFAULT_MAIN_MODEL);
 const QUICK_MODEL =
-  normalizeOpenAiModelSlug(process.env.OPENAI_NOVEL_QUICK_MODEL ?? process.env.OPENAI_MODEL, "gpt-5.4-mini");
+  normalizeOpenAiModelSlug(process.env.OPENAI_NOVEL_QUICK_MODEL ?? process.env.OPENAI_MODEL, DEFAULT_QUICK_MODEL);
+const FALLBACK_MODEL =
+  normalizeOpenAiModelSlug(process.env.OPENAI_NOVEL_FALLBACK_MODEL, DEFAULT_FALLBACK_MODEL);
 const OPENAI_TIMEOUT_MS = 28_000;
 
 const WORLDS = {
@@ -456,6 +461,52 @@ const staleMotifs = ["採藥", "采藥", "殘卷", "老者", "山洞", "靈泉",
 const twistMotifs = ["時間錯位", "輪迴記憶", "前世", "世界規則", "身份反轉", "遺物", "因果代價", "詭異", "天道", "科技", "AI", "系統", "下一世", "名字", "影子", "錯誤碼", "站台", "防火牆", "夢", "不存在", "告示", "裂縫", "代價"];
 const genericChoiceWords = ["接受", "拒絕", "攻擊", "離開", "查看", "調查", "前進", "等待"];
 
+function supportsReasoningControls(model) {
+  return /^gpt-5(\.|-|$)/.test(model) || /^o\d/.test(model);
+}
+
+function shouldTryFallback(error) {
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  return (
+    message.includes("model") ||
+    message.includes("unsupported") ||
+    message.includes("unknown parameter") ||
+    message.includes("invalid_request_error") ||
+    message.includes("not found") ||
+    message.includes("does not exist") ||
+    message.includes("access")
+  );
+}
+
+function buildResponsesRequestBody(model, prompt, maxOutputTokens) {
+  const body = {
+    model,
+    instructions: buildSystemPrompt(),
+    input: prompt,
+    max_output_tokens: maxOutputTokens,
+    store: false,
+    text: {
+      format: {
+        type: "json_schema",
+        name: "novel_scene",
+        strict: true,
+        schema: AI_NOVEL_SCENE_JSON_SCHEMA,
+      },
+    },
+  };
+
+  if (supportsReasoningControls(model)) {
+    body.reasoning = {
+      effort: model === QUICK_MODEL ? "low" : "medium",
+    };
+    body.text.verbosity = "medium";
+  } else {
+    body.temperature = 0.72;
+  }
+
+  return body;
+}
+
 function noveltyScore(scene, payload = {}) {
   const directives = payload?.narrativeDirectives ?? {};
   const recipe = directives.sceneRecipe ?? {};
@@ -505,25 +556,7 @@ async function callOpenAi(prompt, maxOutputTokens, model = MAIN_MODEL) {
         Authorization: `Bearer ${getOpenAiApiKey()}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model,
-        instructions: buildSystemPrompt(),
-        input: prompt,
-        max_output_tokens: maxOutputTokens,
-        reasoning: {
-          effort: model === QUICK_MODEL ? "low" : "medium",
-        },
-        store: false,
-        text: {
-          verbosity: "medium",
-          format: {
-            type: "json_schema",
-            name: "novel_scene",
-            strict: true,
-            schema: AI_NOVEL_SCENE_JSON_SCHEMA,
-          },
-        },
-      }),
+      body: JSON.stringify(buildResponsesRequestBody(model, prompt, maxOutputTokens)),
       signal: controller.signal,
     });
     const payload = await response.json().catch(() => ({}));
@@ -546,15 +579,31 @@ async function callOpenAi(prompt, maxOutputTokens, model = MAIN_MODEL) {
 export async function generateNovelScene(kind, payload) {
   const maxOutputTokens = kind === "settlement" || kind === "death" ? 1800 : 2400;
   const prompt = buildPrompt(kind, payload);
-  let scene = await callOpenAi(prompt, maxOutputTokens);
+  let scene;
+
+  try {
+    scene = await callOpenAi(prompt, maxOutputTokens, MAIN_MODEL);
+  } catch (error) {
+    if (FALLBACK_MODEL === MAIN_MODEL || !shouldTryFallback(error)) {
+      throw error;
+    }
+    console.warn(`[novel] primary model ${MAIN_MODEL} failed, retrying with ${FALLBACK_MODEL}`, error);
+    scene = await callOpenAi(prompt, maxOutputTokens, FALLBACK_MODEL);
+  }
+
   let novelty = noveltyScore(scene, payload);
 
   if (novelty.shouldRegenerate && kind !== "settlement") {
-    scene = await callOpenAi(
-      `${prompt}\n\n上一版新奇度不足：${novelty.reasons.join("、")}。請重寫，避開剛才重複元素，加入世界規則異常、前世衝突、因果代價或跨世界反轉。不要使用 unknown、status、risk、debug 等英文介面詞。`,
-      maxOutputTokens,
-      QUICK_MODEL,
-    );
+    const retryPrompt = `${prompt}\n\n上一版新奇度不足：${novelty.reasons.join("、")}。請重寫，避開剛才重複元素，加入世界規則異常、前世衝突、因果代價或跨世界反轉。不要使用 unknown、status、risk、debug 等英文介面詞。`;
+    try {
+      scene = await callOpenAi(retryPrompt, maxOutputTokens, QUICK_MODEL);
+    } catch (error) {
+      if (FALLBACK_MODEL === QUICK_MODEL || !shouldTryFallback(error)) {
+        throw error;
+      }
+      console.warn(`[novel] quick model ${QUICK_MODEL} failed, retrying with ${FALLBACK_MODEL}`, error);
+      scene = await callOpenAi(retryPrompt, maxOutputTokens, FALLBACK_MODEL);
+    }
     novelty = noveltyScore(scene, payload);
   }
 

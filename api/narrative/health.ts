@@ -1,4 +1,6 @@
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
+const DEFAULT_MAIN_MODEL = "gpt-5.5";
+const DEFAULT_FALLBACK_MODEL = "gpt-4.1";
 
 function normalizeOpenAiModelSlug(value: string | undefined, fallback: string): string {
   const model = value?.trim();
@@ -15,8 +17,44 @@ function normalizeOpenAiModelSlug(value: string | undefined, fallback: string): 
 }
 
 const NARRATIVE_MODEL =
-  normalizeOpenAiModelSlug(process.env.OPENAI_NOVEL_MODEL ?? process.env.OPENAI_MODEL, "gpt-5.5");
+  normalizeOpenAiModelSlug(process.env.OPENAI_NOVEL_MODEL ?? process.env.OPENAI_MODEL, DEFAULT_MAIN_MODEL);
+const FALLBACK_MODEL =
+  normalizeOpenAiModelSlug(process.env.OPENAI_NOVEL_FALLBACK_MODEL, DEFAULT_FALLBACK_MODEL);
 const OPENAI_TIMEOUT_MS = 12_000;
+
+function supportsReasoningControls(model: string): boolean {
+  return /^gpt-5(\.|-|$)/.test(model) || /^o\d/.test(model);
+}
+
+function shouldTryFallback(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  return (
+    message.includes("model") ||
+    message.includes("unsupported") ||
+    message.includes("unknown parameter") ||
+    message.includes("invalid_request_error") ||
+    message.includes("not found") ||
+    message.includes("does not exist") ||
+    message.includes("access")
+  );
+}
+
+function buildProbeBody(model: string) {
+  const body: Record<string, unknown> = {
+    model,
+    input: "Reply with only OK.",
+    max_output_tokens: 16,
+    store: false,
+  };
+
+  if (supportsReasoningControls(model)) {
+    body.reasoning = {
+      effort: "low",
+    };
+  }
+
+  return body;
+}
 
 function getOpenAiApiKey(): string {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -54,7 +92,7 @@ function getProbe(request: any): string | null {
   return new URL(request.url ?? "/", "https://local.invalid").searchParams.get("probe");
 }
 
-async function probeOpenAi() {
+async function probeOpenAiWithModel(model: string) {
   const startedAt = Date.now();
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS);
@@ -66,15 +104,7 @@ async function probeOpenAi() {
         Authorization: `Bearer ${getOpenAiApiKey()}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: NARRATIVE_MODEL,
-        input: "Reply with only OK.",
-        max_output_tokens: 16,
-        reasoning: {
-          effort: "low",
-        },
-        store: false,
-      }),
+      body: JSON.stringify(buildProbeBody(model)),
       signal: controller.signal,
     });
     const payload = await response.json().catch(() => ({}));
@@ -82,7 +112,7 @@ async function probeOpenAi() {
     return {
       ok: response.ok,
       status: response.status,
-      model: NARRATIVE_MODEL,
+      model,
       elapsedMs: Date.now() - startedAt,
       error: payload.error?.message ?? null,
       code: payload.error?.code ?? null,
@@ -91,6 +121,33 @@ async function probeOpenAi() {
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+async function probeOpenAi() {
+  const primary = await probeOpenAiWithModel(NARRATIVE_MODEL);
+
+  if (primary.ok || FALLBACK_MODEL === NARRATIVE_MODEL) {
+    return {
+      primary,
+      fallback: null,
+      effectiveModel: primary.ok ? primary.model : null,
+    };
+  }
+
+  if (!shouldTryFallback(new Error(primary.error ?? ""))) {
+    return {
+      primary,
+      fallback: null,
+      effectiveModel: null,
+    };
+  }
+
+  const fallback = await probeOpenAiWithModel(FALLBACK_MODEL);
+  return {
+    primary,
+    fallback,
+    effectiveModel: fallback.ok ? fallback.model : null,
+  };
 }
 
 export default async function handler(request: any, response: any) {
@@ -113,6 +170,8 @@ export default async function handler(request: any, response: any) {
     ok: true,
     hasOpenAiKey: Boolean(process.env.OPENAI_API_KEY),
     model: NARRATIVE_MODEL,
+    fallbackModel: FALLBACK_MODEL,
+    rawModelEnv: process.env.OPENAI_NOVEL_MODEL ?? process.env.OPENAI_MODEL ?? null,
     nodeEnv: process.env.NODE_ENV ?? null,
     openAiProbe,
   });

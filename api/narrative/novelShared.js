@@ -23,7 +23,8 @@ const QUICK_MODEL =
   normalizeOpenAiModelSlug(process.env.OPENAI_NOVEL_QUICK_MODEL ?? process.env.OPENAI_MODEL, DEFAULT_QUICK_MODEL);
 const FALLBACK_MODEL =
   normalizeOpenAiModelSlug(process.env.OPENAI_NOVEL_FALLBACK_MODEL, DEFAULT_FALLBACK_MODEL);
-const OPENAI_TIMEOUT_MS = 28_000;
+const OPENAI_TIMEOUT_MS = 42_000;
+const REASONING_EFFORT = process.env.OPENAI_NOVEL_REASONING_EFFORT ?? "low";
 
 const WORLDS = {
   world_qingyun: {
@@ -172,26 +173,22 @@ const AI_NOVEL_SCENE_JSON_SCHEMA = {
     "noveltyHints",
   ],
   properties: {
-    sceneId: { type: "string", minLength: 3, maxLength: 64 },
-    chapterTitle: { type: "string", minLength: 2, maxLength: 40 },
-    storyText: { type: "string", minLength: 200, maxLength: 3200 },
+    sceneId: { type: "string" },
+    chapterTitle: { type: "string" },
+    storyText: { type: "string" },
     displayLines: {
       type: "array",
-      minItems: 3,
-      maxItems: 36,
-      items: { type: "string", minLength: 1, maxLength: 220 },
+      items: { type: "string" },
     },
     choices: {
       type: "array",
-      minItems: 0,
-      maxItems: 4,
       items: {
         type: "object",
         additionalProperties: false,
         required: ["choiceId", "text", "tone"],
         properties: {
-          choiceId: { type: "string", minLength: 2, maxLength: 48 },
-          text: { type: "string", minLength: 6, maxLength: 80 },
+          choiceId: { type: "string" },
+          text: { type: "string" },
           tone: {
             type: "string",
             enum: ["cautious", "greedy", "kind", "ruthless", "reckless", "wise", "defy_fate"],
@@ -201,7 +198,6 @@ const AI_NOVEL_SCENE_JSON_SCHEMA = {
     },
     hiddenEffects: {
       type: "array",
-      maxItems: 5,
       items: {
         type: "object",
         additionalProperties: false,
@@ -227,9 +223,9 @@ const AI_NOVEL_SCENE_JSON_SCHEMA = {
               "settlementBonus",
             ],
           },
-          target: { type: ["string", "null"], maxLength: 64 },
+          target: { type: "string" },
           intensity: { type: "string", enum: ["tiny", "small", "medium", "large", "huge"] },
-          reason: { type: "string", minLength: 2, maxLength: 80 },
+          reason: { type: "string" },
         },
       },
     },
@@ -249,15 +245,14 @@ const AI_NOVEL_SCENE_JSON_SCHEMA = {
         isDeathScene: { type: "boolean" },
         isSettlementScene: { type: "boolean" },
         isWorldClearScene: { type: "boolean" },
-        currentArc: { type: "string", minLength: 2, maxLength: 80 },
+        currentArc: { type: "string" },
         tensionLevel: { type: "string", enum: ["low", "medium", "high", "climax"] },
       },
     },
-    internalSummary: { type: "string", minLength: 10, maxLength: 700 },
+    internalSummary: { type: "string" },
     noveltyHints: {
       type: "array",
-      maxItems: 8,
-      items: { type: "string", minLength: 1, maxLength: 80 },
+      items: { type: "string" },
     },
   },
 };
@@ -457,6 +452,74 @@ function validateScene(value) {
   );
 }
 
+function splitDisplayLines(storyText) {
+  return String(storyText ?? "")
+    .split(/(?<=[。！？；])\s*/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 24);
+}
+
+function sanitizeChoice(choice, index) {
+  const tones = ["cautious", "greedy", "kind", "ruthless", "reckless", "wise", "defy_fate"];
+  return {
+    choiceId: String(choice?.choiceId || `choice_${index + 1}`).slice(0, 48),
+    text: String(choice?.text || "順著輪迴長河留下的痕跡走下去").slice(0, 90),
+    tone: tones.includes(choice?.tone) ? choice.tone : "wise",
+  };
+}
+
+function sanitizeHiddenEffect(effect) {
+  return {
+    type: effect.type,
+    target: typeof effect.target === "string" ? effect.target : "",
+    intensity: effect.intensity,
+    reason: String(effect.reason || "劇情推進").slice(0, 90),
+  };
+}
+
+function sanitizeScene(scene, kind) {
+  const displayLines = Array.isArray(scene.displayLines) && scene.displayLines.length > 0
+    ? scene.displayLines.map((line) => String(line)).filter(Boolean).slice(0, 30)
+    : splitDisplayLines(scene.storyText);
+  const isTerminal =
+    Boolean(scene.storyState?.isDeathScene) ||
+    Boolean(scene.storyState?.isSettlementScene) ||
+    kind === "death" ||
+    kind === "settlement";
+
+  return {
+    sceneId: String(scene.sceneId || `scene_${Date.now()}`).slice(0, 64),
+    chapterTitle: String(scene.chapterTitle || "輪迴岔路").slice(0, 48),
+    storyText: String(scene.storyText || displayLines.join("")),
+    displayLines,
+    choices: isTerminal
+      ? []
+      : (Array.isArray(scene.choices) ? scene.choices : [])
+          .slice(0, 4)
+          .map(sanitizeChoice),
+    hiddenEffects: (Array.isArray(scene.hiddenEffects) ? scene.hiddenEffects : [])
+      .filter((effect) => effect?.type && effect?.intensity)
+      .slice(0, 5)
+      .map(sanitizeHiddenEffect),
+    storyState: {
+      shouldContinue: !isTerminal,
+      isDeathScene: Boolean(scene.storyState?.isDeathScene) || kind === "death",
+      isSettlementScene: Boolean(scene.storyState?.isSettlementScene) || kind === "settlement",
+      isWorldClearScene: Boolean(scene.storyState?.isWorldClearScene),
+      currentArc: String(scene.storyState?.currentArc || scene.chapterTitle || "輪迴岔路").slice(0, 80),
+      tensionLevel: ["low", "medium", "high", "climax"].includes(scene.storyState?.tensionLevel)
+        ? scene.storyState.tensionLevel
+        : "medium",
+    },
+    internalSummary: String(scene.internalSummary || scene.storyText || "輪迴劇情繼續推進。").slice(0, 700),
+    noveltyHints: (Array.isArray(scene.noveltyHints) ? scene.noveltyHints : ["保底續寫"])
+      .map((hint) => String(hint))
+      .filter(Boolean)
+      .slice(0, 8),
+  };
+}
+
 const staleMotifs = ["採藥", "采藥", "殘卷", "老者", "山洞", "靈泉", "普通突破", "普通心魔", "撿到功法", "神秘老人"];
 const twistMotifs = ["時間錯位", "輪迴記憶", "前世", "世界規則", "身份反轉", "遺物", "因果代價", "詭異", "天道", "科技", "AI", "系統", "下一世", "名字", "影子", "錯誤碼", "站台", "防火牆", "夢", "不存在", "告示", "裂縫", "代價"];
 const genericChoiceWords = ["接受", "拒絕", "攻擊", "離開", "查看", "調查", "前進", "等待"];
@@ -483,7 +546,6 @@ function buildResponsesRequestBody(model, prompt, maxOutputTokens) {
     model,
     instructions: buildSystemPrompt(),
     input: prompt,
-    max_output_tokens: maxOutputTokens,
     store: false,
     text: {
       format: {
@@ -495,9 +557,13 @@ function buildResponsesRequestBody(model, prompt, maxOutputTokens) {
     },
   };
 
+  if (Number.isFinite(maxOutputTokens) && maxOutputTokens > 0) {
+    body.max_output_tokens = maxOutputTokens;
+  }
+
   if (supportsReasoningControls(model)) {
     body.reasoning = {
-      effort: model === QUICK_MODEL ? "low" : "medium",
+      effort: REASONING_EFFORT,
     };
     body.text.verbosity = "medium";
   } else {
@@ -570,14 +636,75 @@ async function callOpenAi(prompt, maxOutputTokens, model = MAIN_MODEL) {
     if (!outputText) throw new Error("OpenAI response did not include output_text");
     const scene = JSON.parse(outputText);
     if (!validateScene(scene)) throw new Error("Invalid novel scene schema");
-    return scene;
+    return sanitizeScene(scene);
   } finally {
     clearTimeout(timeoutId);
   }
 }
 
+function buildEmergencyScene(kind, payload, error) {
+  const life = payload?.lifeState ?? {};
+  const player = payload?.playerSnapshot ?? {};
+  const novel = payload?.novelState ?? {};
+  const directives = payload?.narrativeDirectives ?? {};
+  const recipe = directives.sceneRecipe ?? {};
+  const world = directives.worldDirectives ?? WORLDS[life.worldId] ?? WORLDS[player.currentWorldId] ?? WORLDS.world_qingyun;
+  const themeName = directives.lifeTheme?.name ?? LIFE_THEMES[life.lifeThemeId] ?? "未明命格";
+  const hook = recipe.requiredNewElement ?? "一枚帶著前世熱意的碎光";
+  const twist = recipe.requiredTwist ?? "眼前機緣其實牽著前世因果";
+  const title =
+    kind === "death"
+      ? "長河回聲"
+      : kind === "settlement"
+        ? "輪迴清算"
+        : novel.visibleStory?.length
+          ? "天機斷續"
+          : "此世初醒";
+  const terminal = kind === "death" || kind === "settlement";
+  const storyText = terminal
+    ? `輪迴長河在黑暗中亮起，像有人隔著無數世輕輕撥動水面。${world.name ?? "此世"}的風聲逐漸遠去，${themeName}留下的因果卻沒有散開。${hook}沉入神魂深處，化作下一次睜眼前最後一點微光。你沒有立刻得到答案，只隱約明白，${twist}，而這份代價會在下一世重新開花。`
+    : `天機忽然沉默了一瞬，像雲層後有一隻手按住命盤。${world.name ?? "此世"}的規則沒有停止，反而在短暫空白中露出一道細縫。你感到${hook}正在靠近，胸口的前世記憶微微發燙，提醒你：${twist}。下一步若走錯，或許只是失去一段機緣；若走對，這條岔路會把整個世界推向新的方向。`;
+
+  return sanitizeScene(
+    {
+      sceneId: `fallback_${kind}_${Date.now()}`,
+      chapterTitle: title,
+      storyText,
+      displayLines: splitDisplayLines(storyText),
+      choices: terminal
+        ? []
+        : [
+            {
+              choiceId: "follow_reincarnation_trace",
+              text: "追上那道發燙的前世痕跡，賭它不是陷阱",
+              tone: "defy_fate",
+            },
+            {
+              choiceId: "cut_current_cause",
+              text: "暫時斬斷此地因果，先保住神魂清明",
+              tone: "cautious",
+            },
+          ],
+      hiddenEffects: terminal
+        ? []
+        : [{ type: "memoryGain", target: "", intensity: "tiny", reason: "天機斷續仍留下前世痕跡" }],
+      storyState: {
+        shouldContinue: !terminal,
+        isDeathScene: kind === "death",
+        isSettlementScene: kind === "settlement",
+        isWorldClearScene: false,
+        currentArc: title,
+        tensionLevel: kind === "death" ? "climax" : "medium",
+      },
+      internalSummary: `AI 生成失敗後使用保底續寫。原因：${error instanceof Error ? error.message : "unknown"}`,
+      noveltyHints: ["保底續寫", hook, twist],
+    },
+    kind,
+  );
+}
+
 export async function generateNovelScene(kind, payload) {
-  const maxOutputTokens = kind === "settlement" || kind === "death" ? 1800 : 2400;
+  const maxOutputTokens = undefined;
   const prompt = buildPrompt(kind, payload);
   let scene;
 
@@ -585,27 +712,19 @@ export async function generateNovelScene(kind, payload) {
     scene = await callOpenAi(prompt, maxOutputTokens, MAIN_MODEL);
   } catch (error) {
     if (FALLBACK_MODEL === MAIN_MODEL || !shouldTryFallback(error)) {
-      throw error;
+      console.warn(`[novel] primary model ${MAIN_MODEL} failed, using emergency scene`, error);
+      return buildEmergencyScene(kind, payload, error);
     }
-    console.warn(`[novel] primary model ${MAIN_MODEL} failed, retrying with ${FALLBACK_MODEL}`, error);
-    scene = await callOpenAi(prompt, maxOutputTokens, FALLBACK_MODEL);
+    try {
+      console.warn(`[novel] primary model ${MAIN_MODEL} failed, retrying with ${FALLBACK_MODEL}`, error);
+      scene = await callOpenAi(prompt, maxOutputTokens, FALLBACK_MODEL);
+    } catch (fallbackError) {
+      console.warn(`[novel] fallback model ${FALLBACK_MODEL} failed, using emergency scene`, fallbackError);
+      return buildEmergencyScene(kind, payload, fallbackError);
+    }
   }
 
   let novelty = noveltyScore(scene, payload);
-
-  if (novelty.shouldRegenerate && kind !== "settlement") {
-    const retryPrompt = `${prompt}\n\n上一版新奇度不足：${novelty.reasons.join("、")}。請重寫，避開剛才重複元素，加入世界規則異常、前世衝突、因果代價或跨世界反轉。不要使用 unknown、status、risk、debug 等英文介面詞。`;
-    try {
-      scene = await callOpenAi(retryPrompt, maxOutputTokens, QUICK_MODEL);
-    } catch (error) {
-      if (FALLBACK_MODEL === QUICK_MODEL || !shouldTryFallback(error)) {
-        throw error;
-      }
-      console.warn(`[novel] quick model ${QUICK_MODEL} failed, retrying with ${FALLBACK_MODEL}`, error);
-      scene = await callOpenAi(retryPrompt, maxOutputTokens, FALLBACK_MODEL);
-    }
-    novelty = noveltyScore(scene, payload);
-  }
 
   return {
     ...scene,

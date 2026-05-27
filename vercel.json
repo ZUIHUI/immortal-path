@@ -9,13 +9,13 @@
       "maxDuration": 30
     },
     "api/narrative/start.ts": {
-      "maxDuration": 30
+      "maxDuration": 60
     },
     "api/narrative/continue.ts": {
-      "maxDuration": 30
+      "maxDuration": 60
     },
     "api/narrative/settlement.ts": {
-      "maxDuration": 30
+      "maxDuration": 60
     },
     "api/narrative/health.ts": {
       "maxDuration": 15

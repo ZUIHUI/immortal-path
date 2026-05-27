@@ -21,6 +21,7 @@ const NARRATIVE_MODEL =
 const FALLBACK_MODEL =
   normalizeOpenAiModelSlug(process.env.OPENAI_NOVEL_FALLBACK_MODEL, DEFAULT_FALLBACK_MODEL);
 const OPENAI_TIMEOUT_MS = 12_000;
+const REASONING_EFFORT = process.env.OPENAI_NOVEL_REASONING_EFFORT ?? "low";
 
 function supportsReasoningControls(model: string): boolean {
   return /^gpt-5(\.|-|$)/.test(model) || /^o\d/.test(model);
@@ -49,7 +50,7 @@ function buildProbeBody(model: string) {
 
   if (supportsReasoningControls(model)) {
     body.reasoning = {
-      effort: "low",
+      effort: REASONING_EFFORT,
     };
   }
 
@@ -171,6 +172,7 @@ export default async function handler(request: any, response: any) {
     hasOpenAiKey: Boolean(process.env.OPENAI_API_KEY),
     model: NARRATIVE_MODEL,
     fallbackModel: FALLBACK_MODEL,
+    reasoningEffort: REASONING_EFFORT,
     rawModelEnv: process.env.OPENAI_NOVEL_MODEL ?? process.env.OPENAI_MODEL ?? null,
     nodeEnv: process.env.NODE_ENV ?? null,
     openAiProbe,

@@ -1,5 +1,5 @@
 export const AI_CONFIG = {
-  narrativeModel: "gpt-5.5-thinking",
+  narrativeModel: "gpt-5.5",
   maxRecentLogs: 3,
   maxChoices: 2,
   maxSuggestedEffects: 2,

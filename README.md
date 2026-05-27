@@ -37,11 +37,11 @@ OPENAI_API_KEY=你的_key
 可選：
 
 ```bash
-OPENAI_NOVEL_MODEL=gpt-5.5-thinking
-OPENAI_NOVEL_QUICK_MODEL=gpt-5.5-instant
+OPENAI_NOVEL_MODEL=gpt-5.5
+OPENAI_NOVEL_QUICK_MODEL=gpt-5.4-mini
 ```
 
-`OPENAI_NOVEL_MODEL` 用於主線小說生成；`OPENAI_NOVEL_QUICK_MODEL` 只在新奇度不足需要低成本重試時使用。若你的帳號或區域尚未支援這些模型，可用 `OPENAI_MODEL` 覆寫成目前可用模型。
+`OPENAI_NOVEL_MODEL` 用於主線小說生成；`OPENAI_NOVEL_QUICK_MODEL` 只在新奇度不足需要低成本重試時使用。API 模型 ID 請使用 `gpt-5.5` 這類 slug，不要填 ChatGPT 介面名稱如 `gpt-5.5-thinking`。程式會把常見舊填法自動正規化，但 Vercel 建議直接填正確 slug。
 
 ## 驗證
 

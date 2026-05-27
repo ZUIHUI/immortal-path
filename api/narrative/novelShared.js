@@ -1,12 +1,23 @@
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
+
+function normalizeOpenAiModelSlug(value, fallback) {
+  const model = String(value ?? "").trim();
+  if (!model) return fallback;
+
+  const aliases = {
+    "gpt-5.5-thinking": "gpt-5.5",
+    "gpt-5.5-pro": "gpt-5.5",
+    "gpt-5.5-instant": "gpt-5.4-mini",
+    "gpt-5.5-mini": "gpt-5.4-mini",
+  };
+
+  return aliases[model.toLowerCase()] ?? model;
+}
+
 const MAIN_MODEL =
-  process.env.OPENAI_NOVEL_MODEL ??
-  process.env.OPENAI_MODEL ??
-  "gpt-5.5-thinking";
+  normalizeOpenAiModelSlug(process.env.OPENAI_NOVEL_MODEL ?? process.env.OPENAI_MODEL, "gpt-5.5");
 const QUICK_MODEL =
-  process.env.OPENAI_NOVEL_QUICK_MODEL ??
-  process.env.OPENAI_MODEL ??
-  "gpt-5.5-instant";
+  normalizeOpenAiModelSlug(process.env.OPENAI_NOVEL_QUICK_MODEL ?? process.env.OPENAI_MODEL, "gpt-5.4-mini");
 const OPENAI_TIMEOUT_MS = 28_000;
 
 const WORLDS = {
@@ -499,9 +510,12 @@ async function callOpenAi(prompt, maxOutputTokens, model = MAIN_MODEL) {
         instructions: buildSystemPrompt(),
         input: prompt,
         max_output_tokens: maxOutputTokens,
-        temperature: 0.72,
+        reasoning: {
+          effort: model === QUICK_MODEL ? "low" : "medium",
+        },
         store: false,
         text: {
+          verbosity: "medium",
           format: {
             type: "json_schema",
             name: "novel_scene",

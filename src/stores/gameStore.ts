@@ -18,6 +18,7 @@ import {
   resolveEventOption,
   summarizeEventResultChanges,
 } from "../core/eventEngine";
+import { resolveHiddenEffects } from "../core/hiddenEffectResolver";
 import { resolveAiSuggestedEffects } from "../core/narrativeEffectResolver";
 import {
   applyReincarnationResult,
@@ -32,6 +33,7 @@ import { events } from "../data/events";
 import { getFateById } from "../data/fates";
 import { getIdentityById } from "../data/identities";
 import { createInfiniteLifeSelection } from "../data/infiniteFlow";
+import { getLegacyRelicById, getRelicsForWorld } from "../data/legacyRelics";
 import { getHigherRealmId, getNextRealm } from "../data/realms";
 import { getShopItemById } from "../data/reincarnationShop";
 import { getWorldById } from "../data/worlds";
@@ -40,10 +42,18 @@ import {
   continueNarrativeScene,
   generateNarrativeScene,
 } from "../services/narrativeApiClient";
+import {
+  continueNovelScene,
+  generateSettlementScene as requestSettlementScene,
+  startNovelLife,
+} from "../services/novelApiClient";
 import { saveService } from "../services/saveService";
 import type {
   AiNarrativeResponse,
   AiNarrativeState,
+  AiHiddenEffect,
+  AiNovelChoice,
+  AiNovelScene,
   AttributeMap,
   EventId,
   FateId,
@@ -56,6 +66,8 @@ import type {
   LifeState,
   NarrativeLogSummary,
   NarrativePlayerSnapshot,
+  NovelState,
+  NovelStoryBlock,
   Player,
   BreakthroughMethodId,
   ReincarnationEndType,
@@ -74,6 +86,7 @@ interface GameStateData {
   currentEvent?: GameEvent;
   latestResult?: ReincarnationResult;
   aiNarrativeState: AiNarrativeState;
+  novelState: NovelState;
   currentPage: GamePage;
   lastActionMessage?: string;
 }
@@ -87,6 +100,7 @@ interface GameActions {
     fateId: FateId;
     storyPremiseId?: string;
     storySeed?: string;
+    lifeThemeId?: string;
   }) => void;
   startInfiniteLife: () => Promise<void>;
   cultivateOnce: () => void;
@@ -97,6 +111,17 @@ interface GameActions {
   chooseAiNarrativeChoice: (choiceId: string) => Promise<void>;
   applyAiNarrativeResult: (response: AiNarrativeResponse) => void;
   endAiNarrativeEvent: () => void;
+  startNewReincarnation: () => Promise<void>;
+  generateOpeningScene: () => Promise<void>;
+  selectNovelChoice: (choiceId: string) => Promise<void>;
+  continueNovelAfterChoice: (choiceId: string) => Promise<void>;
+  applyHiddenEffects: (hiddenEffects: AiHiddenEffect[]) => void;
+  generateDeathScene: () => Promise<void>;
+  generateSettlementScene: () => Promise<void>;
+  enterNextLife: () => Promise<void>;
+  skipTypewriter: () => void;
+  setNovelTyping: (isTyping: boolean) => void;
+  clearNovelError: () => void;
   settleCurrentLife: (reason?: string, endType?: ReincarnationEndType) => void;
   buyShopItem: (itemId: ShopItemId) => void;
   resetSave: () => void;
@@ -151,6 +176,34 @@ function createEmptyAiNarrativeState(): AiNarrativeState {
   };
 }
 
+function createEmptyNovelState(): NovelState {
+  return {
+    currentLifeId: null,
+    currentWorldId: null,
+    currentLifeThemeId: null,
+    currentArc: "",
+    storySoFarSummary: "",
+    visibleStory: [],
+    pendingChoices: [],
+    lastSelectedChoice: null,
+    internalFlags: [],
+    hiddenState: {
+      tensionLevel: "low",
+      relationshipHints: [],
+      unresolvedMysteries: [],
+      obtainedRelics: [],
+      recentSceneTypes: [],
+      recentMotifs: [],
+    },
+    isGenerating: false,
+    isTyping: false,
+    hasStarted: false,
+    isDead: false,
+    isSettlementReady: false,
+    error: null,
+  };
+}
+
 function calculateYearsSurvived(player: Player, life: LifeState): number {
   return Math.max(0, player.age - life.startingAge);
 }
@@ -166,6 +219,7 @@ function toSaveData(state: GameStateData): SaveData {
     currentEvent: state.currentEvent,
     latestResult: state.latestResult,
     aiNarrativeState: state.aiNarrativeState,
+    novelState: state.novelState,
     currentPage: state.currentPage,
   };
 }
@@ -186,11 +240,13 @@ function getInitialState(): GameStateData {
         ...fallbackMeta,
         ...loaded.meta,
         worldLegacyIds: loaded.meta.worldLegacyIds ?? [],
+        legacyRelicIds: loaded.meta.legacyRelicIds ?? [],
       },
       logs: loaded.logs,
       currentEvent: loaded.currentEvent,
       latestResult: loaded.latestResult,
       aiNarrativeState: loaded.aiNarrativeState ?? createEmptyAiNarrativeState(),
+      novelState: loaded.novelState ?? createEmptyNovelState(),
       currentPage: loaded.player ? loaded.currentPage : "start",
     };
   }
@@ -199,6 +255,7 @@ function getInitialState(): GameStateData {
     meta: createInitialMeta(),
     logs: [],
     aiNarrativeState: createEmptyAiNarrativeState(),
+    novelState: createEmptyNovelState(),
     currentPage: "start",
   };
 }
@@ -289,6 +346,81 @@ function recentLogSummaries(logs: GameLog[]): NarrativeLogSummary[] {
   }));
 }
 
+function createNovelStoryBlock(
+  scene: AiNovelScene,
+  sceneType: NovelStoryBlock["sceneType"],
+): NovelStoryBlock {
+  return {
+    id: scene.sceneId,
+    chapterTitle: scene.chapterTitle,
+    storyText: scene.storyText,
+    displayLines: scene.displayLines.length ? scene.displayLines : [scene.storyText],
+    sceneType,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function appendNovelScene(
+  novelState: NovelState,
+  scene: AiNovelScene,
+  sceneType: NovelStoryBlock["sceneType"],
+): NovelState {
+  const block = createNovelStoryBlock(scene, sceneType);
+  const nextSummary = [novelState.storySoFarSummary, scene.internalSummary]
+    .filter(Boolean)
+    .join(" ")
+    .slice(-1800);
+
+  return {
+    ...novelState,
+    currentArc: scene.storyState.currentArc,
+    storySoFarSummary: nextSummary,
+    visibleStory: [...novelState.visibleStory, block].slice(-24),
+    pendingChoices:
+      scene.storyState.isDeathScene || scene.storyState.isSettlementScene
+        ? []
+        : scene.choices,
+    hiddenState: {
+      ...novelState.hiddenState,
+      tensionLevel: scene.storyState.tensionLevel,
+      recentSceneTypes: [sceneType, ...novelState.hiddenState.recentSceneTypes].slice(0, 6),
+      recentMotifs: Array.from(
+        new Set([...scene.noveltyHints, ...novelState.hiddenState.recentMotifs]),
+      ).slice(0, 12),
+      unresolvedMysteries: Array.from(
+        new Set([
+          ...novelState.hiddenState.unresolvedMysteries,
+          ...scene.noveltyHints.filter((hint) => /謎|未知|未解|反轉|伏筆|錯位/.test(hint)),
+        ]),
+      ).slice(0, 8),
+    },
+    isGenerating: false,
+    isTyping: true,
+    hasStarted: true,
+    isDead: novelState.isDead || scene.storyState.isDeathScene,
+    isSettlementReady:
+      novelState.isSettlementReady ||
+      scene.storyState.isDeathScene ||
+      scene.storyState.isSettlementScene ||
+      scene.storyState.isWorldClearScene,
+    error: null,
+  };
+}
+
+function createNovelApiPayload(state: GameStateData) {
+  if (!state.player || !state.life) {
+    throw new Error("尚未開始輪迴");
+  }
+
+  return {
+    lifeState: state.life,
+    metaProgress: state.meta,
+    playerSnapshot: createNarrativePlayerSnapshot(state.player),
+    novelState: state.novelState,
+    selectedChoice: state.novelState.lastSelectedChoice,
+  };
+}
+
 function drawStaticEventState(
   state: GameStateData,
   reason?: string,
@@ -334,15 +466,15 @@ function getAiNarrativeFallbackReason(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error ?? "");
 
   if (message.includes("insufficient_quota") || message.includes("quota")) {
-    return "OpenAI 額度不足或帳單尚未啟用，已改由既有事件推進";
+    return "天機額度不足或帳單尚未啟用，已改由既有事件推進";
   }
 
   if (message.includes("OPENAI_API_KEY") || message.includes("api key")) {
-    return "後端尚未正確設定 OPENAI_API_KEY，已改由既有事件推進";
+    return "後端尚未正確設定天機金鑰，已改由既有事件推進";
   }
 
   if (message.includes("schema") || message.includes("Invalid AI narrative response")) {
-    return "AI 回傳格式不合規，已改由既有事件推進";
+    return "天機回應格式不合規，已改由既有事件推進";
   }
 
   if (message.includes("abort") || message.includes("timeout")) {
@@ -350,11 +482,11 @@ function getAiNarrativeFallbackReason(error: unknown): string {
   }
 
   if (message.includes("404")) {
-    return "找不到後端 API route，請確認 Vercel 已部署 /api/narrative，已改由既有事件推進";
+    return "找不到後端天機入口，請確認 Vercel 已部署 /api/narrative，已改由既有事件推進";
   }
 
   if (message.includes("500")) {
-    return `後端 AI route 執行失敗：${message.slice(0, 160)}`;
+    return "後端天機推演暫時失靈，已改由既有事件推進";
   }
 
   if (message.includes("今日天機推演次數已達上限")) {
@@ -430,6 +562,14 @@ function applyNarrativeGameEffects(
           ),
         };
         break;
+      case "legacyRelicGain":
+        nextLife = {
+          ...nextLife,
+          importantEventIds: Array.from(
+            new Set([...nextLife.importantEventIds, effect.target ?? createId("relic")]),
+          ),
+        };
+        break;
       case "reincarnationPointMultiplierDelta":
         nextLife = {
           ...nextLife,
@@ -444,6 +584,7 @@ function applyNarrativeGameEffects(
         breakthroughHint = effect.reason;
         break;
       case "completeWorldObjective":
+      case "worldClear":
         if (hasMetWorldObjective(nextPlayer, getWorldById(nextLife.worldId))) {
           nextLife = {
             ...nextLife,
@@ -484,7 +625,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     persist(get());
   },
 
-  startLife({ name, worldId, identityId, fateId, storyPremiseId, storySeed }) {
+  startLife({ name, worldId, identityId, fateId, storyPremiseId, storySeed, lifeThemeId }) {
     const state = get();
     const world = getWorldById(worldId);
     const identity = getIdentityById(identityId);
@@ -500,6 +641,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       ...life,
       storyPremiseId,
       storySeed: storySeed ?? createId("story"),
+      lifeThemeId,
     };
     const log = createLog(
       player.generation,
@@ -514,6 +656,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
       currentEvent: undefined,
       latestResult: undefined,
       aiNarrativeState: createEmptyAiNarrativeState(),
+      novelState: {
+        ...createEmptyNovelState(),
+        currentLifeId: life.startedAt,
+        currentWorldId: worldId,
+        currentLifeThemeId: lifeThemeId ?? null,
+        currentArc: "開篇",
+      },
       currentPage: "main",
       logs: appendLogs(state.logs, [log]),
       lastActionMessage: log.message,
@@ -534,6 +683,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       fateId: selection.fateId,
       storyPremiseId: selection.premise.id,
       storySeed: createId("seed"),
+      lifeThemeId: selection.lifeTheme.id,
     });
 
     const nextState: GameStateData = {
@@ -1090,6 +1240,415 @@ export const useGameStore = create<GameStore>((set, get) => ({
     persist(nextState);
   },
 
+  async startNewReincarnation() {
+    const state = get();
+
+    if (state.novelState.isGenerating || state.novelState.pendingChoices.length > 0) {
+      return;
+    }
+
+    const selection = createInfiniteLifeSelection(state.meta);
+    get().startLife({
+      name: selection.name,
+      worldId: selection.worldId,
+      identityId: selection.identityId,
+      fateId: selection.fateId,
+      storyPremiseId: selection.premise.id,
+      storySeed: createId("seed"),
+      lifeThemeId: selection.lifeTheme.id,
+    });
+
+    await get().generateOpeningScene();
+  },
+
+  async generateOpeningScene() {
+    const state = get();
+
+    if (
+      state.novelState.isGenerating ||
+      state.novelState.pendingChoices.length > 0 ||
+      !state.player ||
+      !state.life
+    ) {
+      return;
+    }
+
+    const loadingState: GameStateData = {
+      ...state,
+      currentPage: "event",
+      novelState: {
+        ...state.novelState,
+        isGenerating: true,
+        error: null,
+      },
+      lastActionMessage: "命數流轉中……",
+    };
+
+    set(loadingState);
+    persist(loadingState);
+
+    try {
+      const scene = await startNovelLife(createNovelApiPayload(get()));
+      const nextState: GameStateData = {
+        ...get(),
+        currentPage: "event",
+        novelState: appendNovelScene(get().novelState, scene, "opening"),
+      };
+      set(nextState);
+      persist(nextState);
+      get().applyHiddenEffects(scene.hiddenEffects);
+    } catch {
+      const failed: GameStateData = {
+        ...get(),
+        novelState: {
+          ...get().novelState,
+          isGenerating: false,
+          error: "輪迴長河暫時沉默，請再試一次。",
+        },
+        lastActionMessage: "輪迴長河暫時沉默，請再試一次。",
+      };
+      set(failed);
+      persist(failed);
+    }
+  },
+
+  async selectNovelChoice(choiceId) {
+    await get().continueNovelAfterChoice(choiceId);
+  },
+
+  async continueNovelAfterChoice(choiceId) {
+    const state = get();
+    const selectedChoice = state.novelState.pendingChoices.find(
+      (choice) => choice.choiceId === choiceId,
+    );
+
+    if (
+      state.novelState.isGenerating ||
+      !state.player ||
+      !state.life ||
+      !state.life.isAlive ||
+      !selectedChoice
+    ) {
+      return;
+    }
+
+    const loadingState: GameStateData = {
+      ...state,
+      novelState: {
+        ...state.novelState,
+        lastSelectedChoice: selectedChoice,
+        isGenerating: true,
+        error: null,
+      },
+      lastActionMessage: "此世因果將啟……",
+    };
+
+    set(loadingState);
+    persist(loadingState);
+
+    try {
+      const scene = await continueNovelScene(createNovelApiPayload(get()));
+      const nextState: GameStateData = {
+        ...get(),
+        novelState: appendNovelScene(get().novelState, scene, "continue"),
+      };
+      set(nextState);
+      persist(nextState);
+      get().applyHiddenEffects(scene.hiddenEffects);
+
+      const afterApply = get();
+      if (afterApply.novelState.isDead && !scene.storyState.isDeathScene) {
+        await get().generateDeathScene();
+      }
+    } catch {
+      const failed: GameStateData = {
+        ...get(),
+        novelState: {
+          ...get().novelState,
+          isGenerating: false,
+          error: "天機暫時斷線，選擇仍保留，可再試一次。",
+        },
+        lastActionMessage: "天機暫時斷線，選擇仍保留，可再試一次。",
+      };
+      set(failed);
+      persist(failed);
+    }
+  },
+
+  applyHiddenEffects(hiddenEffects) {
+    const state = get();
+
+    if (!state.player || !state.life) {
+      return;
+    }
+
+    const world = getWorldById(state.life.worldId);
+    const resolved = resolveHiddenEffects({
+      hiddenEffects,
+      player: state.player,
+      lifeState: state.life,
+      metaProgress: state.meta,
+      worldConfig: world,
+    });
+    const applied = applyNarrativeGameEffects(state.player, state.life, resolved.effects);
+    let nextPlayer = applied.player;
+    let nextLife = applied.life;
+    let nextMeta = state.meta;
+    let novelState = state.novelState;
+    const gainedRelics = resolved.effects
+      .filter((effect) => effect.type === "legacyRelicGain" && effect.target)
+      .map((effect) => effect.target as string);
+    const worldClear = resolved.effects.some((effect) => effect.type === "worldClear");
+
+    if (resolved.effects.some((effect) => effect.type === "breakthroughHint") && canBreakthrough(nextPlayer)) {
+      const outcome = runBreakthrough({
+        player: nextPlayer,
+        meta: state.meta,
+        world,
+        identity: getIdentityById(nextLife.identityId),
+        fate: getFateById(nextLife.fateId),
+        methodId: "stable",
+      });
+      nextPlayer = outcome.player;
+      nextLife = {
+        ...nextLife,
+        objectiveCompleted: nextLife.objectiveCompleted || outcome.objectiveCompleted,
+        highestRealmId: getHigherRealmId(nextLife.highestRealmId, outcome.player.highestRealmId),
+        yearsSurvived: calculateYearsSurvived(outcome.player, nextLife),
+        reincarnationPointMultiplier:
+          nextLife.reincarnationPointMultiplier + outcome.reincarnationPointMultiplierDelta,
+      };
+    }
+
+    if (worldClear) {
+      nextLife = {
+        ...nextLife,
+        objectiveCompleted: true,
+      };
+      novelState = {
+        ...novelState,
+        isSettlementReady: true,
+      };
+    }
+
+    const relicPool = gainedRelics.length ? gainedRelics : worldClear ? [getRelicsForWorld(world.worldId)[0]?.relicId].filter(Boolean) : [];
+    if (relicPool.length > 0) {
+      nextMeta = {
+        ...nextMeta,
+        legacyRelicIds: Array.from(new Set([...(nextMeta.legacyRelicIds ?? []), ...relicPool])),
+        worldLegacyIds: Array.from(new Set([...(nextMeta.worldLegacyIds ?? []), ...relicPool])),
+      };
+      novelState = {
+        ...novelState,
+        hiddenState: {
+          ...novelState.hiddenState,
+          obtainedRelics: Array.from(
+            new Set([
+              ...novelState.hiddenState.obtainedRelics,
+              ...relicPool.map((id) => getLegacyRelicById(id)?.name ?? id),
+            ]),
+          ),
+        },
+      };
+    }
+
+    if (applied.deathReason) {
+      nextPlayer = {
+        ...nextPlayer,
+        hp: 0,
+        status: ["dead"],
+      };
+      nextLife = {
+        ...nextLife,
+        isAlive: false,
+        deathReason: applied.deathReason,
+        endedAt: new Date().toISOString(),
+      };
+      novelState = {
+        ...novelState,
+        isDead: true,
+        isSettlementReady: true,
+        pendingChoices: [],
+      };
+    }
+
+    const nextState: GameStateData = {
+      ...state,
+      player: nextPlayer,
+      life: nextLife,
+      meta: nextMeta,
+      novelState,
+      lastActionMessage: resolved.balanceWarnings[0],
+    };
+
+    set(nextState);
+    persist(nextState);
+  },
+
+  async generateDeathScene() {
+    const state = get();
+
+    if (!state.player || !state.life || state.novelState.isGenerating) {
+      return;
+    }
+
+    set({
+      novelState: {
+        ...state.novelState,
+        isGenerating: true,
+        pendingChoices: [],
+        error: null,
+      },
+    });
+    persist(get());
+
+    try {
+      const scene = await requestSettlementScene({
+        ...createNovelApiPayload(get()),
+        generationGoal: "death",
+      });
+      const nextState: GameStateData = {
+        ...get(),
+        novelState: appendNovelScene(get().novelState, scene, "death"),
+      };
+      set(nextState);
+      persist(nextState);
+    } catch {
+      const fallbackScene: AiNovelScene = {
+        sceneId: createId("death_scene"),
+        chapterTitle: "輪迴長河",
+        storyText:
+          "此世最後一縷光在識海深處熄滅時，你沒有立刻墜入黑暗。遠處有長河沉默流過，河面映出你做過的每一個選擇，也映出那些尚未回收的因果。你伸手想抓住什麼，只握住一點微弱的前世餘燼。",
+        displayLines: [
+          "此世最後一縷光在識海深處熄滅時，你沒有立刻墜入黑暗。",
+          "遠處有長河沉默流過，河面映出你做過的每一個選擇，也映出那些尚未回收的因果。",
+          "你伸手想抓住什麼，只握住一點微弱的前世餘燼。",
+        ],
+        choices: [],
+        hiddenEffects: [],
+        storyState: {
+          shouldContinue: false,
+          isDeathScene: true,
+          isSettlementScene: false,
+          isWorldClearScene: false,
+          currentArc: "死亡回望",
+          tensionLevel: "climax",
+        },
+        internalSummary: "此世死亡，神魂回到輪迴長河前。",
+        noveltyHints: ["死亡小說化"],
+      };
+      const nextState: GameStateData = {
+        ...get(),
+        novelState: appendNovelScene(get().novelState, fallbackScene, "death"),
+      };
+      set(nextState);
+      persist(nextState);
+    }
+  },
+
+  async generateSettlementScene() {
+    const state = get();
+
+    if (!state.player || !state.life || state.novelState.isGenerating) {
+      return;
+    }
+
+    const loadingState: GameStateData = {
+      ...state,
+      novelState: {
+        ...state.novelState,
+        isGenerating: true,
+        pendingChoices: [],
+        error: null,
+      },
+      lastActionMessage: "輪迴清算中……",
+    };
+    set(loadingState);
+    persist(loadingState);
+
+    try {
+      const scene = await requestSettlementScene({
+        ...createNovelApiPayload(get()),
+        generationGoal: "settlement",
+      });
+      const finalized =
+        !get().latestResult
+          ? finalizeLife(
+              get(),
+              get().player!,
+              get().life!,
+              get().life?.deathReason ?? "此世因果清算，神魂歸入輪迴",
+              get().life?.objectiveCompleted ? "objective" : "death",
+            )
+          : get();
+      const nextState: GameStateData = {
+        ...finalized,
+        currentPage: "result",
+        novelState: {
+          ...appendNovelScene(get().novelState, scene, "settlement"),
+          isSettlementReady: true,
+          pendingChoices: [],
+        },
+      };
+      set(nextState);
+      persist(nextState);
+    } catch {
+      const nextState: GameStateData = {
+        ...get(),
+        novelState: {
+          ...get().novelState,
+          isGenerating: false,
+          error: "輪迴清算暫時受阻，請再試一次。",
+        },
+      };
+      set(nextState);
+      persist(nextState);
+    }
+  },
+
+  async enterNextLife() {
+    await get().startNewReincarnation();
+  },
+
+  skipTypewriter() {
+    const nextState: GameStateData = {
+      ...get(),
+      novelState: {
+        ...get().novelState,
+        isTyping: false,
+      },
+    };
+
+    set(nextState);
+    persist(nextState);
+  },
+
+  setNovelTyping(isTyping) {
+    const nextState: GameStateData = {
+      ...get(),
+      novelState: {
+        ...get().novelState,
+        isTyping,
+      },
+    };
+
+    set(nextState);
+    persist(nextState);
+  },
+
+  clearNovelError() {
+    const nextState: GameStateData = {
+      ...get(),
+      novelState: {
+        ...get().novelState,
+        error: null,
+      },
+    };
+
+    set(nextState);
+    persist(nextState);
+  },
+
   settleCurrentLife(reason = "主動結束本世，歸入輪迴", endType = "manual") {
     const state = get();
 
@@ -1135,6 +1694,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       currentEvent: undefined,
       latestResult: undefined,
       aiNarrativeState: createEmptyAiNarrativeState(),
+      novelState: createEmptyNovelState(),
       currentPage: "start",
       lastActionMessage: undefined,
     });

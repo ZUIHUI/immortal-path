@@ -19,7 +19,7 @@ export function AiNarrativeScenePanel({ scene }: AiNarrativeScenePanelProps) {
     <section className={`panel event-card rarity-card rarity-${scene.rarity}`}>
       <div className="section-heading">
         <div>
-          <p className="eyebrow">AI 奇遇</p>
+          <p className="eyebrow">天機奇遇</p>
           <h2>{scene.title}</h2>
         </div>
         <span className={`rarity-badge rarity-badge-${scene.rarity}`}>

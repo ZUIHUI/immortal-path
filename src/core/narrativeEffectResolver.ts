@@ -93,6 +93,38 @@ const attributeKeys: Array<keyof AttributeMap> = [
 
 const statusKeys: PlayerStatus[] = ["injured", "weak", "heart_demon"];
 
+const resourceLabels: Record<keyof ResourceMap, string> = {
+  spiritStones: "靈石",
+  aura: "靈氣",
+  pills: "丹藥",
+  herbs: "靈草",
+  artifacts: "法器",
+  destiny: "天命",
+  karma: "因果",
+  pastLifeMemory: "前世記憶",
+};
+
+const attributeLabels: Record<keyof AttributeMap, string> = {
+  spiritualRoot: "靈根",
+  hp: "氣血",
+  maxHp: "氣血上限",
+  divineSense: "神識",
+  attack: "攻擊",
+  defense: "防禦",
+  comprehension: "悟性",
+  luck: "福緣",
+  daoHeart: "道心",
+  lifespan: "壽元",
+};
+
+const statusLabels: Record<PlayerStatus, string> = {
+  normal: "正常",
+  injured: "受傷",
+  weak: "虛弱",
+  heart_demon: "心魔",
+  dead: "身死",
+};
+
 export interface ResolveAiSuggestedEffectsInput {
   aiEffects: AiSuggestedEffect[];
   player: Player;
@@ -170,7 +202,7 @@ export function resolveAiSuggestedEffects({
         );
         const value = Math.min(raw, maxCultivationGain);
         if (value < raw) {
-          balanceWarnings.push("cultivationGain clamped to realm-safe maximum");
+          balanceWarnings.push("天機過盛，已壓回當前境界可承受的修為上限");
         }
         effects.push({
           type: "cultivationDelta",
@@ -184,7 +216,7 @@ export function resolveAiSuggestedEffects({
       case "resourceLoss": {
         const target = resolveResourceTarget(aiEffect.target);
         if (!target) {
-          balanceWarnings.push(`Unknown resource target: ${aiEffect.target ?? "none"}`);
+          balanceWarnings.push("天機偏移，已略過一項無法對應的資源變化");
           break;
         }
         const sign = aiEffect.type === "resourceGain" ? 1 : -1;
@@ -202,7 +234,7 @@ export function resolveAiSuggestedEffects({
         });
         pushVisibleChange(
           visibleChanges,
-          target,
+          resourceLabels[target],
           `${value > 0 ? "+" : ""}${value}`,
           value > 0 ? "positive" : "negative",
         );
@@ -212,7 +244,7 @@ export function resolveAiSuggestedEffects({
       case "statLoss": {
         const target = resolveAttributeTarget(aiEffect.target);
         if (!target) {
-          balanceWarnings.push(`Unknown stat target: ${aiEffect.target ?? "none"}`);
+          balanceWarnings.push("天機偏移，已略過一項無法對應的根骨變化");
           break;
         }
         const sign = aiEffect.type === "statGain" ? 1 : -1;
@@ -225,7 +257,7 @@ export function resolveAiSuggestedEffects({
         });
         pushVisibleChange(
           visibleChanges,
-          target,
+          attributeLabels[target],
           `${value > 0 ? "+" : ""}${value}`,
           value > 0 ? "positive" : "negative",
         );
@@ -267,7 +299,7 @@ export function resolveAiSuggestedEffects({
           value,
           reason: aiEffect.reason,
         });
-        pushVisibleChange(visibleChanges, target, `+${value}`, "positive");
+        pushVisibleChange(visibleChanges, resourceLabels[target], `+${value}`, "positive");
         break;
       }
       case "statusGain": {
@@ -277,7 +309,7 @@ export function resolveAiSuggestedEffects({
           target,
           reason: aiEffect.reason,
         });
-        pushVisibleChange(visibleChanges, "狀態", target, "negative");
+        pushVisibleChange(visibleChanges, "狀態", statusLabels[target], "negative");
         break;
       }
       case "eventFlag": {
@@ -286,7 +318,7 @@ export function resolveAiSuggestedEffects({
           target: aiEffect.target ?? responseFlags?.rarity,
           reason: aiEffect.reason,
         });
-        pushVisibleChange(visibleChanges, "事件標記", aiEffect.target ?? "奇遇", "neutral");
+        pushVisibleChange(visibleChanges, "事件標記", "已記錄", "neutral");
         break;
       }
       case "reincarnationBonus": {
@@ -305,7 +337,7 @@ export function resolveAiSuggestedEffects({
   if (responseFlags?.shouldTriggerDeath) {
     effects.push({
       type: "triggerDeath",
-      reason: responseFlags.deathReason ?? responseFlags.logText ?? "此世因 AI 劇情而終結",
+      reason: responseFlags.deathReason ?? responseFlags.logText ?? "此世因天機劇情而終結",
     });
     pushVisibleChange(visibleChanges, "死亡", "觸發", "danger");
   }

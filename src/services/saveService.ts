@@ -29,6 +29,13 @@ function compactSaveData(data: SaveData): SaveData {
       ...data.meta,
       history: data.meta.history.slice(0, 5),
     },
+    novelState: data.novelState
+      ? {
+          ...data.novelState,
+          visibleStory: data.novelState.visibleStory.slice(-8),
+          storySoFarSummary: data.novelState.storySoFarSummary.slice(-1200),
+        }
+      : undefined,
     currentEvent: undefined,
   };
 }

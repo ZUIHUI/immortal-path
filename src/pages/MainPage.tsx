@@ -29,6 +29,8 @@ export function MainPage() {
 
   const highestRealm = getRealmById(player.highestRealmId);
   const premise = getInfiniteStoryPremise(life.storyPremiseId);
+  const premiseTitle = premise?.title ?? "命盤自生";
+  const storyMark = life.storySeed ? `第${player.generation}世變奏` : "新世初啟";
   const remainingCultivation = nextRealm
     ? Math.max(0, nextRealm.requiredCultivation - player.cultivation)
     : 0;
@@ -61,11 +63,11 @@ export function MainPage() {
             </div>
             <div className="stat-tile">
               <span>本世開局</span>
-              <strong>{premise?.title ?? "未知開局"}</strong>
+              <strong>{premiseTitle}</strong>
             </div>
             <div className="stat-tile">
-              <span>劇情種子</span>
-              <strong>{life.storySeed?.slice(-6) ?? "未定"}</strong>
+              <span>劇情命痕</span>
+              <strong>{storyMark}</strong>
             </div>
             <div className="stat-tile">
               <span>推薦操作</span>

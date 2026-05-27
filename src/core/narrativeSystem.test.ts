@@ -148,6 +148,27 @@ describe("AI narrative system", () => {
     expect(resolved.effects.some((effect) => effect.type === "cultivationDelta")).toBe(true);
     expect(resolved.effects.some((effect) => effect.type === "resourceDelta")).toBe(true);
     expect(resolved.visibleChanges.length).toBeGreaterThan(0);
+    expect(resolved.visibleChanges.some((change) => change.label === "丹藥")).toBe(true);
+  });
+
+  it("keeps invalid AI effect targets out of player-facing English text", () => {
+    const fixture = createNarrativeFixture();
+    const resolved = resolveAiSuggestedEffects({
+      aiEffects: [
+        { type: "resourceGain", target: "unknown_resource", intensity: "small", reason: "異象牽引" },
+        { type: "statGain", target: "unknown_stat", intensity: "small", reason: "根骨微震" },
+      ],
+      player: fixture.player,
+      lifeState: fixture.life,
+      metaProgress: fixture.meta,
+      worldConfig: fixture.world,
+    });
+
+    expect(resolved.balanceWarnings.join(" ")).not.toMatch(/unknown|none|resource|stat/i);
+    expect(resolved.balanceWarnings).toEqual([
+      "天機偏移，已略過一項無法對應的資源變化",
+      "天機偏移，已略過一項無法對應的根骨變化",
+    ]);
   });
 
   it("clamps oversized cultivation rewards", () => {
@@ -167,7 +188,7 @@ describe("AI narrative system", () => {
       worldConfig: fixture.world,
     });
 
-    expect(resolved.balanceWarnings).toContain("cultivationGain clamped to realm-safe maximum");
+    expect(resolved.balanceWarnings).toContain("天機過盛，已壓回當前境界可承受的修為上限");
   });
 
   it("converts death and breakthrough flags into game effects", () => {

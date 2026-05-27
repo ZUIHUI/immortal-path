@@ -21,6 +21,13 @@ const FATE_NAMES: Record<string, string> = {
   fate_short_lived: "短命之相",
   fate_natural_dao_body: "天生道體",
 };
+const PREMISE_NAMES: Record<string, string> = {
+  premise_falling_star: "墜星入魂",
+  premise_coffin_wake: "棺中醒世",
+  premise_outer_sect_swap: "外門替身",
+  premise_ancient_scroll: "古卷點名",
+  premise_river_memory: "輪迴河畔",
+};
 const STAGES = [
   ["early", "初期"],
   ["middle", "中期"],
@@ -52,6 +59,7 @@ const TEXT_REPLACEMENTS: Record<string, string> = {
   ...WORLD_NAMES,
   ...IDENTITY_NAMES,
   ...FATE_NAMES,
+  ...PREMISE_NAMES,
   ...REALM_NAMES,
   common: "普通",
   rare: "稀有",
@@ -171,7 +179,7 @@ function parseBody(request: { body?: unknown }) {
 }
 
 function displayName(map: Record<string, string>, id: unknown, fallback: string): string {
-  return typeof id === "string" ? (map[id] ?? id) : fallback;
+  return typeof id === "string" ? (map[id] ?? fallback) : fallback;
 }
 
 function getOpenAiApiKey(): string {
@@ -284,7 +292,7 @@ function buildGeneratePrompt(payload: any): string {
     `命:${displayName(FATE_NAMES, player.fateId, "命格未明")}`,
     `境:${displayName(REALM_NAMES, player.realmId, "未知境界")} 修:${player.cultivation ?? 0}`,
     `篇:${getStoryCue(player.realmId)}`,
-    `輪:${payload?.lifeState?.storySeed ?? "未知"} 開:${payload?.lifeState?.storyPremiseId ?? "未知"}`,
+    `開:${displayName(PREMISE_NAMES, payload?.lifeState?.storyPremiseId, "命盤自生")} 世:${player.generation ?? 1}`,
     `目標:達築基初期；未達則done=false`,
     `齡:${player.age ?? 0}/${player.lifespan ?? 0} 血:${player.hp ?? 0}/${player.maxHp ?? 0}`,
     `悟福心:${player.comprehension ?? 0}/${player.luck ?? 0}/${player.daoHeart ?? 0}`,

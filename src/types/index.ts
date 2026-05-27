@@ -47,6 +47,24 @@ export type ReincarnationEndType = "death" | "objective" | "manual";
 
 export type EventRarity = "common" | "rare" | "epic" | "legendary" | "mythic";
 
+export type WorldType =
+  | "ancient_xianxia"
+  | "modern_reiki"
+  | "cyber_cultivation"
+  | "future_stellar"
+  | "weird_city"
+  | "apocalypse"
+  | "time_loop"
+  | "parallel_world"
+  | "dream_realm"
+  | "high_martial"
+  | "cosmic_horror"
+  | "anomaly_containment"
+  | "ai_heaven"
+  | "mixed_realm";
+
+export type WorldEra = "ancient" | "modern" | "future" | "unknown" | "mixed";
+
 export type CultivationCriticalTier =
   | "normal"
   | "minor_insight"
@@ -97,6 +115,34 @@ export type AiSuggestedEffectIntensity =
   | "large"
   | "huge";
 
+export type AiNovelTensionLevel = "low" | "medium" | "high" | "climax";
+
+export type AiNovelChoiceTone =
+  | "cautious"
+  | "greedy"
+  | "kind"
+  | "ruthless"
+  | "reckless"
+  | "wise"
+  | "defy_fate";
+
+export type AiHiddenEffectType =
+  | "cultivationGain"
+  | "realmProgress"
+  | "hpLoss"
+  | "lifespanLoss"
+  | "resourceGain"
+  | "resourceLoss"
+  | "karmaGain"
+  | "destinyGain"
+  | "memoryGain"
+  | "legacyRelicGain"
+  | "statusGain"
+  | "breakthroughOpportunity"
+  | "death"
+  | "worldClear"
+  | "settlementBonus";
+
 export type NarrativeTriggerType =
   | "manual_explore"
   | "cultivation_event"
@@ -110,9 +156,11 @@ export type GameEffectType =
   | "lifespanDelta"
   | "statusAdd"
   | "eventFlag"
+  | "legacyRelicGain"
   | "reincarnationPointMultiplierDelta"
   | "triggerDeath"
   | "breakthroughHint"
+  | "worldClear"
   | "completeWorldObjective";
 
 export type VisibleChangeTone = "positive" | "negative" | "neutral" | "danger";
@@ -198,6 +246,7 @@ export interface LifeState {
   fateId: FateId;
   storySeed?: string;
   storyPremiseId?: string;
+  lifeThemeId?: string;
   startedAt: string;
   startingAge: number;
   endedAt?: string;
@@ -229,6 +278,7 @@ export interface MetaProgress {
   unlockedFateIds: FateId[];
   completedWorldIds: WorldId[];
   worldLegacyIds: string[];
+  legacyRelicIds?: string[];
   shopLevels: Record<ShopItemId, number>;
   bestRealmId: RealmId;
   history: ReincarnationResult[];
@@ -271,6 +321,24 @@ export interface InfiniteStoryPremise {
   surpriseHook: string;
 }
 
+export interface LifeTheme {
+  id: string;
+  name: string;
+  description: string;
+  motifs: string[];
+  escalationBeats: string[];
+  finalChoiceHints: string[];
+  compatibleWorldTypes: WorldType[];
+}
+
+export interface StoryTheme {
+  id: string;
+  category: string;
+  name: string;
+  prompts: string[];
+  antiClicheTwist: string;
+}
+
 export interface WorldLegacy {
   id: string;
   worldId: WorldId;
@@ -278,6 +346,29 @@ export interface WorldLegacy {
   description: string;
   effectSummary: string;
   rarity: EventRarity;
+}
+
+export interface LegacyRelicEffect {
+  type:
+    | "initialAttribute"
+    | "rareEventWeight"
+    | "breakthroughHook"
+    | "deathProtection"
+    | "worldWeight"
+    | "narrativeHook";
+  target?: string;
+  value?: number;
+  description: string;
+}
+
+export interface LegacyRelic {
+  relicId: string;
+  name: string;
+  description: string;
+  sourceWorldId: string;
+  rarity: EventRarity;
+  effects: LegacyRelicEffect[];
+  narrativeHooks: string[];
 }
 
 export interface Identity {
@@ -316,6 +407,18 @@ export interface WorldRule {
 
 export interface World {
   worldId: WorldId;
+  name: string;
+  type: WorldType;
+  era: WorldEra;
+  tone: string[];
+  coreRule: string;
+  forbiddenRules?: string[];
+  specialTerms: string[];
+  possibleThemes: string[];
+  narrativeConstraints: string[];
+  clearCondition: string;
+  deathRisks: string[];
+  legacyRelics: string[];
   worldName: string;
   worldType: string;
   difficulty: "low" | "medium" | "high";
@@ -490,6 +593,73 @@ export interface AiNarrativeState {
   error: string | null;
 }
 
+export interface AiNovelChoice {
+  choiceId: string;
+  text: string;
+  tone: AiNovelChoiceTone;
+}
+
+export interface AiHiddenEffect {
+  type: AiHiddenEffectType;
+  target?: string;
+  intensity: AiSuggestedEffectIntensity;
+  reason: string;
+}
+
+export interface AiNovelScene {
+  sceneId: string;
+  chapterTitle: string;
+  storyText: string;
+  displayLines: string[];
+  choices: AiNovelChoice[];
+  hiddenEffects: AiHiddenEffect[];
+  storyState: {
+    shouldContinue: boolean;
+    isDeathScene: boolean;
+    isSettlementScene: boolean;
+    isWorldClearScene: boolean;
+    currentArc: string;
+    tensionLevel: AiNovelTensionLevel;
+  };
+  internalSummary: string;
+  noveltyHints: string[];
+}
+
+export interface NovelStoryBlock {
+  id: string;
+  chapterTitle: string;
+  storyText: string;
+  displayLines: string[];
+  sceneType: "opening" | "continue" | "death" | "settlement";
+  createdAt: string;
+}
+
+export interface NovelState {
+  currentLifeId: string | null;
+  currentWorldId: string | null;
+  currentLifeThemeId: string | null;
+  currentArc: string;
+  storySoFarSummary: string;
+  visibleStory: NovelStoryBlock[];
+  pendingChoices: AiNovelChoice[];
+  lastSelectedChoice: AiNovelChoice | null;
+  internalFlags: string[];
+  hiddenState: {
+    tensionLevel: AiNovelTensionLevel;
+    relationshipHints: string[];
+    unresolvedMysteries: string[];
+    obtainedRelics: string[];
+    recentSceneTypes: string[];
+    recentMotifs: string[];
+  };
+  isGenerating: boolean;
+  isTyping: boolean;
+  hasStarted: boolean;
+  isDead: boolean;
+  isSettlementReady: boolean;
+  error: string | null;
+}
+
 export interface GameEffect {
   type: GameEffectType;
   target?: string;
@@ -577,6 +747,7 @@ export interface SaveData {
   currentEvent?: GameEvent;
   latestResult?: ReincarnationResult;
   aiNarrativeState?: AiNarrativeState;
+  novelState?: NovelState;
   currentPage: GamePage;
 }
 

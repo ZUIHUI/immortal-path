@@ -11,9 +11,9 @@ export default async function handler(request: any, response: any) {
   }
 
   try {
-    response.status(200).json(await generateNovelScene("continue", parseBody(request)));
+    response.status(200).json(await generateNovelScene("start", parseBody(request)));
   } catch (error) {
-    console.error("[novel] continue route failed", error);
-    response.status(500).json(toApiErrorPayload(error, "Failed to continue novel scene"));
+    console.error("[novel] start route failed", error);
+    response.status(500).json(toApiErrorPayload(error, "Failed to start novel scene"));
   }
 }

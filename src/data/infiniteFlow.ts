@@ -1,10 +1,12 @@
 import { fates } from "./fates";
 import { identities } from "./identities";
+import { getLifeThemesForWorldType } from "./lifeThemes";
 import { worlds } from "./worlds";
 import type {
   FateId,
   IdentityId,
   InfiniteStoryPremise,
+  LifeTheme,
   MetaProgress,
   WorldId,
 } from "../types";
@@ -65,6 +67,7 @@ export function createInfiniteLifeSelection(
   identityId: IdentityId;
   fateId: FateId;
   premise: InfiniteStoryPremise;
+  lifeTheme: LifeTheme;
 } {
   const availableWorlds = worlds.filter(
     (world) => world.isMvp && meta.unlockedWorldIds.includes(world.worldId),
@@ -76,12 +79,16 @@ export function createInfiniteLifeSelection(
     (fate) => fate.isMvp && meta.unlockedFateIds.includes(fate.id),
   );
 
+  const world = pick(availableWorlds, random);
+  const themePool = getLifeThemesForWorldType(world.type);
+
   return {
     name: `第${meta.totalLives + 1}世異數`,
-    worldId: pick(availableWorlds, random).worldId,
+    worldId: world.worldId,
     identityId: pick(availableIdentities, random).id,
     fateId: pick(availableFates, random).id,
     premise: pick(infiniteStoryPremises, random),
+    lifeTheme: pick(themePool, random),
   };
 }
 

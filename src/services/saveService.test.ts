@@ -77,4 +77,58 @@ describe("saveService", () => {
     expect(result.compacted).toBe(true);
     expect(loaded?.logs.length).toBe(30);
   });
+
+  it("saves active novel story and pending choices", () => {
+    const storage = createMemoryStorage();
+    const service = createSaveService(() => storage);
+    const data: SaveData = {
+      ...createSaveData(),
+      novelState: {
+        currentLifeId: "life_test",
+        currentWorldId: "world_qingyun",
+        currentLifeThemeId: "life_theme_shadow_ascends_first",
+        currentArc: "影子先成仙",
+        storySoFarSummary: "影子在月光下先一步吐納。",
+        visibleStory: [
+          {
+            id: "scene_001",
+            chapterTitle: "月下影息",
+            storyText: "你的影子在月光下先一步吐納。",
+            displayLines: ["你的影子在月光下先一步吐納。"],
+            sceneType: "opening",
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        pendingChoices: [
+          {
+            choiceId: "follow_shadow",
+            text: "跟著影子走進月光照不到的巷口",
+            tone: "reckless",
+          },
+        ],
+        lastSelectedChoice: null,
+        internalFlags: [],
+        hiddenState: {
+          tensionLevel: "medium",
+          relationshipHints: [],
+          unresolvedMysteries: ["影子的境界"],
+          obtainedRelics: [],
+          recentSceneTypes: ["opening"],
+          recentMotifs: ["影子"],
+        },
+        isGenerating: false,
+        isTyping: false,
+        hasStarted: true,
+        isDead: false,
+        isSettlementReady: false,
+        error: null,
+      },
+    };
+
+    service.save(data);
+    const loaded = service.load();
+
+    expect(loaded?.novelState?.visibleStory[0]?.chapterTitle).toBe("月下影息");
+    expect(loaded?.novelState?.pendingChoices[0]?.choiceId).toBe("follow_shadow");
+  });
 });

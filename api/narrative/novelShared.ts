@@ -123,3 +123,10 @@ export async function generateNovelScene(kind: NovelRouteKind, payload: NovelPro
     noveltyHints: Array.from(new Set([...scene.noveltyHints, ...novelty.reasons])).slice(0, 8),
   };
 }
+
+export default function handler(_request: any, response: any) {
+  response.status(404).json({
+    ok: false,
+    error: "This helper module is not a public narrative endpoint.",
+  });
+}

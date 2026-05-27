@@ -21,6 +21,7 @@ function createWorld(config: {
   cultivationMultiplier?: number;
   eventRiskMultiplier?: number;
   breakthroughRateModifier?: number;
+  lifespanLimit?: number;
   eventPool?: string[];
 }): World {
   return {
@@ -33,7 +34,7 @@ function createWorld(config: {
       cultivationMultiplier: config.cultivationMultiplier ?? 1,
       eventRiskMultiplier: config.eventRiskMultiplier ?? 1,
       breakthroughRateModifier: config.breakthroughRateModifier ?? 0,
-      lifespanLimit: config.timeLimit,
+      lifespanLimit: config.lifespanLimit ?? 120,
     },
     eventPool: config.eventPool ?? [],
     rewardPool: config.legacyRelics,
@@ -177,6 +178,7 @@ export const worlds: World[] = [
     mainObjective: "在第七日到來前打破時間封鎖。",
     clearCondition: "找到重置源頭，讓第八日真正到來。",
     timeLimit: 7,
+    lifespanLimit: 120,
     specialTerms: ["第七日", "回溯傷痕", "牆上警告", "第八日", "因果債務"],
     possibleThemes: ["某個 NPC 記得所有輪迴", "你發現自己曾殺死現在的自己", "前世警告"],
     narrativeConstraints: ["重複場景每次都要露出不同真相。"],

@@ -3,6 +3,7 @@ import { getIdentityById } from "../data/identities";
 import { getNextRealm } from "../data/realms";
 import { calculateCultivationGain } from "./cultivation";
 import { clamp, getMetaBonuses } from "./balance";
+import { hasMetWorldObjective } from "./worldObjective";
 import type {
   AiNarrativeResponse,
   AiSuggestedEffect,
@@ -318,11 +319,15 @@ export function resolveAiSuggestedEffects({
   }
 
   if (responseFlags?.shouldCompleteWorldObjective) {
-    effects.push({
-      type: "completeWorldObjective",
-      reason: responseFlags.logText ?? "世界目標完成",
-    });
-    pushVisibleChange(visibleChanges, "世界目標", "完成", "positive");
+    if (!hasMetWorldObjective(player, worldConfig)) {
+      balanceWarnings.push("天機誤判已校正：尚未達到世界目標境界");
+    } else {
+      effects.push({
+        type: "completeWorldObjective",
+        reason: responseFlags.logText ?? "世界目標完成",
+      });
+      pushVisibleChange(visibleChanges, "世界目標", "完成", "positive");
+    }
   }
 
   return {

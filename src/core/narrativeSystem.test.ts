@@ -188,4 +188,46 @@ describe("AI narrative system", () => {
     expect(resolved.effects.some((effect) => effect.type === "triggerDeath")).toBe(true);
     expect(resolved.effects.some((effect) => effect.type === "breakthroughHint")).toBe(true);
   });
+
+  it("ignores premature AI world objective completion flags", () => {
+    const fixture = createNarrativeFixture();
+    const response = createAiResponse({
+      shouldCompleteWorldObjective: true,
+    });
+    const resolved = resolveAiSuggestedEffects({
+      aiEffects: [],
+      player: fixture.player,
+      lifeState: fixture.life,
+      metaProgress: fixture.meta,
+      worldConfig: fixture.world,
+      responseFlags: response,
+    });
+
+    expect(resolved.effects.some((effect) => effect.type === "completeWorldObjective")).toBe(false);
+    expect(resolved.balanceWarnings).toContain("天機誤判已校正：尚未達到世界目標境界");
+  });
+
+  it("allows AI world objective completion only after the target realm is reached", () => {
+    const fixture = createNarrativeFixture();
+    const response = createAiResponse({
+      shouldCompleteWorldObjective: true,
+    });
+    const resolved = resolveAiSuggestedEffects({
+      aiEffects: [],
+      player: {
+        ...fixture.player,
+        realmId: "realm_foundation_early",
+        highestRealmId: "realm_foundation_early",
+      },
+      lifeState: {
+        ...fixture.life,
+        highestRealmId: "realm_foundation_early",
+      },
+      metaProgress: fixture.meta,
+      worldConfig: fixture.world,
+      responseFlags: response,
+    });
+
+    expect(resolved.effects.some((effect) => effect.type === "completeWorldObjective")).toBe(true);
+  });
 });

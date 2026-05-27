@@ -236,7 +236,7 @@ function extractOutputText(payload: any): string | undefined {
 }
 
 function buildSystemPrompt(): string {
-  return "繁中修仙事件，只回短鍵JSON。可見文字全中文無英文/底線/ID。c約70-110字，ch兩個，e最多兩個。數值只放e。";
+  return "繁中修仙事件，只回短鍵JSON。可見文字全中文無英文/底線/ID。c約70-110字，ch兩個，e最多兩個。數值只放e。done僅已達築基初期才true。";
 }
 
 function buildGeneratePrompt(payload: any): string {
@@ -252,6 +252,7 @@ function buildGeneratePrompt(payload: any): string {
     `身:${displayName(IDENTITY_NAMES, player.identityId, "凡俗修士")}`,
     `命:${displayName(FATE_NAMES, player.fateId, "命格未明")}`,
     `境:${displayName(REALM_NAMES, player.realmId, "未知境界")} 修:${player.cultivation ?? 0}`,
+    `目標:達築基初期；未達則done=false`,
     `齡:${player.age ?? 0}/${player.lifespan ?? 0} 血:${player.hp ?? 0}/${player.maxHp ?? 0}`,
     `悟福心:${player.comprehension ?? 0}/${player.luck ?? 0}/${player.daoHeart ?? 0}`,
     `資:靈石${resources.spiritStones ?? 0} 丹${resources.pills ?? 0} 憶${resources.pastLifeMemory ?? 0}`,

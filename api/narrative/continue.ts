@@ -218,7 +218,7 @@ function extractOutputText(payload: any): string | undefined {
 }
 
 function buildSystemPrompt(): string {
-  return "繁中修仙續寫，只回短鍵JSON。可見文字全中文無英文/底線/ID。c約70-110字，ch兩個，e最多兩個。數值只放e。";
+  return "繁中修仙續寫，只回短鍵JSON。可見文字全中文無英文/底線/ID。c約70-110字，ch兩個，e最多兩個。數值只放e。done僅已達築基初期才true。";
 }
 
 function buildContinuePrompt(payload: any): string {
@@ -232,6 +232,7 @@ function buildContinuePrompt(payload: any): string {
   return [
     "續寫",
     `境:${displayName(REALM_NAMES, player.realmId, "未知境界")} 修:${player.cultivation ?? 0}`,
+    `目標:達築基初期；未達則done=false`,
     `悟福心:${player.comprehension ?? 0}/${player.luck ?? 0}/${player.daoHeart ?? 0}`,
     `前:${sanitizeText(`${scene.title ?? ""} ${scene.content ?? ""}`).slice(0, 110)}`,
     `選:${sanitizeText(choice.text ?? "", "未知選擇")} 風:${sanitizeText(choice.riskLevel ?? "", "未知")}`,

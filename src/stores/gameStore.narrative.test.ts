@@ -119,4 +119,19 @@ describe("gameStore AI narrative actions", () => {
       "ai_scene_store_002",
     );
   });
+
+  it("does not settle the life when AI claims the world objective before foundation establishment", () => {
+    useGameStore.getState().applyAiNarrativeResult(
+      createAiResponse({
+        shouldCompleteWorldObjective: true,
+        logText: "洞中道韻一閃，似有天機誤認此世已成。",
+      }),
+    );
+
+    const state = useGameStore.getState();
+    expect(state.currentPage).not.toBe("result");
+    expect(state.life?.isAlive).toBe(true);
+    expect(state.life?.objectiveCompleted).toBe(false);
+    expect(state.latestResult).toBeUndefined();
+  });
 });

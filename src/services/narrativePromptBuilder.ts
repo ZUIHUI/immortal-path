@@ -67,6 +67,7 @@ export function buildNarrativeSystemPrompt(): string {
     "不要提到 AI、模型、prompt、JSON、系統提示；正文不要寫精確數值獎勵。",
     "choices 固定 2 個；suggestedEffects 最多 3 個，只能用 tiny/small/medium/large/huge。",
     "AI 只能建議 suggestedEffects，實際數值由遊戲核心計算。",
+    "shouldCompleteWorldObjective 只有玩家實際達到世界目標境界時才可為 true；奇遇不能直接宣告通關。",
   ].join("\n");
 }
 

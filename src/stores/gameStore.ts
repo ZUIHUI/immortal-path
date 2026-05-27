@@ -24,6 +24,7 @@ import {
   getNextLifeBonusSummary,
   purchaseShopItem,
 } from "../core/reincarnation";
+import { hasMetWorldObjective } from "../core/worldObjective";
 import { events } from "../data/events";
 import { getFateById } from "../data/fates";
 import { getIdentityById } from "../data/identities";
@@ -412,10 +413,12 @@ function applyNarrativeGameEffects(
         breakthroughHint = effect.reason;
         break;
       case "completeWorldObjective":
-        nextLife = {
-          ...nextLife,
-          objectiveCompleted: true,
-        };
+        if (hasMetWorldObjective(nextPlayer, getWorldById(nextLife.worldId))) {
+          nextLife = {
+            ...nextLife,
+            objectiveCompleted: true,
+          };
+        }
         break;
     }
   }

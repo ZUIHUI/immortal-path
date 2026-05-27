@@ -30,12 +30,15 @@ function compactSaveData(data: SaveData): SaveData {
       history: data.meta.history.slice(0, 5),
     },
     novelState: data.novelState
-      ? {
-          ...data.novelState,
-          visibleStory: data.novelState.visibleStory.slice(-8),
-          storySoFarSummary: data.novelState.storySoFarSummary.slice(-1200),
-        }
-      : undefined,
+        ? {
+            ...data.novelState,
+            visibleStory: data.novelState.visibleStory.slice(-8),
+            storySoFarSummary: data.novelState.storySoFarSummary.slice(-1200),
+            isGenerating: false,
+            isTyping: false,
+            typingBlockId: null,
+          }
+        : undefined,
     currentEvent: undefined,
   };
 }
@@ -82,6 +85,14 @@ export function createSaveService(storageProvider = getDefaultStorage) {
       const payload = {
         ...data,
         savedAt: new Date().toISOString(),
+        novelState: data.novelState
+          ? {
+              ...data.novelState,
+              isGenerating: false,
+              isTyping: false,
+              typingBlockId: null,
+            }
+          : undefined,
       };
 
       try {

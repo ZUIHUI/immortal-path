@@ -37,8 +37,11 @@ OPENAI_API_KEY=你的_key
 可選：
 
 ```bash
-OPENAI_MODEL=gpt-4.1-nano
+OPENAI_NOVEL_MODEL=gpt-5.5-thinking
+OPENAI_NOVEL_QUICK_MODEL=gpt-5.5-instant
 ```
+
+`OPENAI_NOVEL_MODEL` 用於主線小說生成；`OPENAI_NOVEL_QUICK_MODEL` 只在新奇度不足需要低成本重試時使用。若你的帳號或區域尚未支援這些模型，可用 `OPENAI_MODEL` 覆寫成目前可用模型。
 
 ## 驗證
 

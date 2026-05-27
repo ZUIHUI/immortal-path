@@ -1,5 +1,12 @@
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
-const MODEL = process.env.OPENAI_MODEL ?? "gpt-4.1-nano";
+const MAIN_MODEL =
+  process.env.OPENAI_NOVEL_MODEL ??
+  process.env.OPENAI_MODEL ??
+  "gpt-5.5-thinking";
+const QUICK_MODEL =
+  process.env.OPENAI_NOVEL_QUICK_MODEL ??
+  process.env.OPENAI_MODEL ??
+  "gpt-5.5-instant";
 const OPENAI_TIMEOUT_MS = 28_000;
 
 const WORLDS = {
@@ -275,20 +282,42 @@ function buildSystemPrompt() {
     "劇情可跨古代、現代、未來、詭異、末日、夢境、時間循環，但必須符合當前世界規則與 LifeTheme。",
     "避免重複採藥、老者、殘卷、山洞、普通心魔；若使用常見修仙元素，必須加入反轉。",
     "玩家選擇必須像命運分歧，不是功能按鈕；每個選項具體、有代價、有畫面。",
+    "除必要世界名詞如「AI 天道」外，請使用自然繁體中文，不要突然插入 unknown、status、risk、debug、JSON、system 這類出戲字樣。",
     "displayLines 必須由 storyText 拆成適合閱讀器逐行顯示的短行。",
   ].join("\n");
 }
 
-function buildFewShot() {
-  return [
-    "反套路範例：",
+const FEW_SHOTS = [
+  [
     "不要寫：你在山洞中撿到一本功法。",
     "改成：你在山洞中看見一本功法，可翻開第一頁後，紙上寫的不是法訣，而是你上一世死前留下的遺言。更詭異的是，最後一行墨跡未乾，像是剛剛才有人替你寫下。",
+  ],
+  [
+    "不要寫：外門弟子欺負你。",
+    "改成：外門弟子堵住你時，為首那人卻突然叫出一個你從未聽過的名字。那不是你的名字，卻讓胸口的前世玉符微微發燙。",
+  ],
+  [
+    "不要寫：你修為滿了，可以突破。",
+    "改成：這一夜你沒有修煉，丹田中的靈氣卻自行運轉。內視時，你看見另一個自己盤坐其中，已先你一步踏入下一層境界。",
+  ],
+  [
     "不要寫：你在城市中覺醒了靈力。",
-    "改成：你在捷運末班車上醒來，車廂裡所有乘客都低頭看著手機。螢幕上顯示著同一句話：「請勿在本節車廂內修煉。」下一秒，窗外站名亮起，卻不是任何一個你熟悉的站，而是「前世終點」。",
+    "改成：你在捷運末班車上醒來，車廂裡所有乘客都低頭看著手機。螢幕同時顯示：「請勿在本節車廂內修煉。」窗外站名亮起，卻是「前世終點」。",
+  ],
+  [
     "不要寫：你獲得了修真晶片。",
-    "改成：義體診所的燈忽明忽暗。醫師替你打開胸腔時，忽然沉默下來。你的丹田位置早已被人植入一枚黑色核心，核心表面浮現出一行細小字跡：「此人已於三百年前飛升失敗，禁止再次築基。」",
-  ].join("\n");
+    "改成：義體診所的燈忽明忽暗。醫師替你打開胸腔時忽然沉默，因為你的丹田早被植入黑色核心，表面寫著：「此人已於三百年前飛升失敗，禁止再次築基。」",
+  ],
+  [
+    "不要寫：你被怪物追殺。",
+    "改成：追你的不是怪物，而是你上一世沒來得及完成的承諾。它披著人形，手裡捧著你下一世才會出生時的命牌。",
+  ],
+];
+
+function buildFewShot(index = 0) {
+  const first = FEW_SHOTS[index % FEW_SHOTS.length];
+  const second = FEW_SHOTS[(index + 3) % FEW_SHOTS.length];
+  return ["反套路範例：", ...first, ...second].join("\n");
 }
 
 function buildPrompt(kind, payload) {
@@ -296,6 +325,11 @@ function buildPrompt(kind, payload) {
   const life = payload?.lifeState ?? {};
   const meta = payload?.metaProgress ?? {};
   const novel = payload?.novelState ?? {};
+  const directives = payload?.narrativeDirectives ?? {};
+  const recipe = directives.sceneRecipe ?? {};
+  const richLifeTheme = directives.lifeTheme;
+  const richWorld = directives.worldDirectives;
+  const storyThemes = Array.isArray(directives.storyThemes) ? directives.storyThemes : [];
   const world = WORLDS[life.worldId] ?? WORLDS[player.currentWorldId] ?? WORLDS.world_qingyun;
   const resources = player.resources ?? {};
   const recentStory = Array.isArray(novel.visibleStory)
@@ -316,20 +350,37 @@ function buildPrompt(kind, payload) {
   return [
     `任務：${task}`,
     "",
+    "本段劇情配方（必須遵守）：",
+    `場景類型：${recipe.sceneKind ?? kind}`,
+    `主題組合：${recipe.primaryTheme?.category ?? "無限流"} / ${recipe.primaryTheme?.name ?? "跨世反轉"}；${recipe.secondaryTheme?.category ?? "因果"} / ${recipe.secondaryTheme?.name ?? "輪迴回收"}`,
+    `本段必須反轉：${recipe.requiredTwist ?? "讓常見機緣露出前世或世界規則異常。"}`,
+    `本段必須新元素：${recipe.requiredNewElement ?? "一件能改變選擇含義的異常物件。"}`,
+    `延續鉤子：${recipe.continuityHook ?? "承接上一段選擇造成的後果。"}`,
+    `選項設計：${recipe.choiceDesignRule ?? "選項要是具體命運分歧，不能像功能按鈕。"}`,
+    `新奇度目標：${recipe.noveltyTarget ?? "至少一個反轉、一個異常物件、一個跨世伏筆。"}`,
+    `嚴禁重複：${[...(recipe.forbiddenMotifs ?? []), ...(recipe.doNotRepeat ?? [])].slice(0, 28).join("、") || "採藥、老者、殘卷、山洞、普通突破"}`,
+    "",
     "世界設定：",
-    `世界：${world.name}`,
-    `類型：${world.type}`,
-    `時代：${world.era}`,
-    `氛圍：${world.tones.join("、")}`,
+    `世界：${richWorld?.name ?? world.name}`,
+    `類型：${richWorld?.type ?? world.type}`,
+    `時代：${richWorld?.era ?? world.era}`,
+    `氛圍：${(richWorld?.tone ?? world.tones).join("、")}`,
     `核心規則：${world.coreRule}`,
     `主目標：${world.mainObjective}`,
     `通關條件：${world.clearCondition}`,
-    `特殊名詞：${world.terms.join("、")}`,
+    `特殊名詞：${(richWorld?.specialTerms ?? world.terms).join("、")}`,
+    `世界敘事限制：${richWorld?.narrativeConstraints?.join("、") ?? "遵守世界規則，避免模板化事件。"}`,
+    `可能主題：${richWorld?.possibleThemes?.join("、") ?? "輪迴、因果、突破、遺物"}`,
+    `死亡風險：${richWorld?.deathRisks?.join("、") ?? "心魔、代價、世界規則反噬"}`,
     "",
     "玩家底層狀態：",
     `身份：${IDENTITIES[player.identityId] ?? "異世旅人"}`,
     `命格：${FATES[player.fateId] ?? "命格未明"}`,
-    `本世主題：${LIFE_THEMES[life.lifeThemeId] ?? "命盤自生"}`,
+    `本世主題：${richLifeTheme?.name ?? LIFE_THEMES[life.lifeThemeId] ?? "命盤自生"}`,
+    `主題說明：${richLifeTheme?.description ?? "此世因果尚未完全顯形。"}`,
+    `主題母題：${richLifeTheme?.motifs?.join("、") ?? "輪迴、抉擇、遺物"}`,
+    `主題升級節點：${richLifeTheme?.escalationBeats?.join(" -> ") ?? "異常出現 -> 代價加深 -> 抉擇成形"}`,
+    `最終選擇暗示：${richLifeTheme?.finalChoiceHints?.join("、") ?? "保留、犧牲、逆命"}`,
     `境界 / 生命層級：${realmName(player.realmId)}`,
     `年齡 / 壽元：${player.age ?? 0}/${player.lifespan ?? 0}`,
     `氣血：${player.hp ?? 0}/${player.maxHp ?? 0}`,
@@ -348,11 +399,18 @@ function buildPrompt(kind, payload) {
     "",
     selectedChoice,
     "",
-    buildFewShot(),
+    "本段可用 StoryTheme：",
+    storyThemes
+      .map((theme) => `- ${theme.category} / ${theme.name}：${theme.prompts?.join("、")}。反套路：${theme.antiClicheTwist}`)
+      .join("\n") || "- 無限流 / 輪迴分歧：讓世界規則與前世因果同時推動劇情。",
+    "",
+    buildFewShot(recipe.fewShotIndex ?? 0),
     "",
     "輸出要求：",
     kind === "start" ? "開篇約 800 到 1500 字。" : "一般接續約 600 到 1200 字；死亡或結算約 800 到 1500 字。",
     "每段必須包含場景、行動、心境、衝突、結果或懸念。",
+    "不得使用 unknown、undefined、status、risk、debug、JSON、prompt、system 等英文介面詞。",
+    "不得重複最近劇情的主要地點、主要道具、核心衝突與選項句型。",
     "非死亡/結算場景 choices 必須 2 到 4 個；死亡/結算場景 choices 可為空。",
     "hiddenEffects 只能用 intensity，不可給具體數字。",
     "internalSummary 用 120 字內摘要本段關鍵因果，供下一段續寫。",
@@ -383,27 +441,49 @@ function validateScene(value) {
   );
 }
 
-const staleMotifs = ["採藥", "采藥", "殘卷", "老者", "山洞", "靈泉", "普通突破", "普通心魔"];
-const twistMotifs = ["時間錯位", "輪迴記憶", "前世", "世界規則", "身份反轉", "遺物", "因果代價", "詭異", "天道", "科技", "AI", "系統", "下一世", "名字", "影子", "錯誤碼", "站台", "防火牆", "夢"];
+const staleMotifs = ["採藥", "采藥", "殘卷", "老者", "山洞", "靈泉", "普通突破", "普通心魔", "撿到功法", "神秘老人"];
+const twistMotifs = ["時間錯位", "輪迴記憶", "前世", "世界規則", "身份反轉", "遺物", "因果代價", "詭異", "天道", "科技", "AI", "系統", "下一世", "名字", "影子", "錯誤碼", "站台", "防火牆", "夢", "不存在", "告示", "裂縫", "代價"];
+const genericChoiceWords = ["接受", "拒絕", "攻擊", "離開", "查看", "調查", "前進", "等待"];
 
-function noveltyScore(scene) {
-  const text = `${scene.chapterTitle}\n${scene.storyText}\n${scene.noveltyHints.join(" ")}`;
+function noveltyScore(scene, payload = {}) {
+  const directives = payload?.narrativeDirectives ?? {};
+  const recipe = directives.sceneRecipe ?? {};
+  const recentMotifs = payload?.novelState?.hiddenState?.recentMotifs ?? [];
+  const doNotRepeat = [...(recipe.doNotRepeat ?? []), ...(recipe.forbiddenMotifs ?? []), ...recentMotifs]
+    .filter((word) => typeof word === "string" && word.length >= 2);
+  const text = `${scene.chapterTitle}\n${scene.storyText}\n${scene.choices?.map((choice) => choice.text).join(" ") ?? ""}\n${scene.noveltyHints.join(" ")}`;
   const stale = staleMotifs.filter((word) => text.includes(word)).length;
   const twist = twistMotifs.filter((word) => text.includes(word)).length;
-  const hasTwist = /不是|卻|竟|原來|其實|上一世|下一世|不存在|三百年/.test(text);
-  const score = Math.max(0, Math.min(100, 48 + twist * 8 - stale * 9 + (hasTwist ? 10 : 0)));
+  const repeated = doNotRepeat.filter((word) => text.includes(word)).slice(0, 8).length;
+  const genericChoices = (scene.choices ?? []).filter((choice) =>
+    genericChoiceWords.some((word) => choice.text.trim() === word || choice.text.trim().startsWith(`${word}。`)),
+  ).length;
+  const hasTwist = /不是|卻|竟|原來|其實|上一世|下一世|不存在|三百年|反而|早已|替你|另一個你/.test(text);
+  const hasDilemma = /代價|救|犧牲|背叛|立誓|吞噬|放棄|奪|斬斷|承認|欺瞞/.test(text);
+  const hasEnglishNoise = /\b(unknown|undefined|status|risk|debug|prompt|json|system)\b/i.test(text);
+  const lengthBonus = scene.storyText.length >= 600 ? 8 : scene.storyText.length >= 380 ? 3 : -8;
+  let score = 52 + twist * 5 - stale * 9 - repeated * 7 - genericChoices * 9 + lengthBonus;
+  if (hasTwist) score += 9;
+  if (hasDilemma) score += 7;
+  if (hasEnglishNoise) score -= 22;
+  score = Math.max(0, Math.min(100, score));
+
   return {
     score,
     reasons: [
       stale ? `含有 ${stale} 個常見套路元素` : "",
       twist ? `含有 ${twist} 個反套路或跨世界元素` : "",
+      repeated ? `重複了 ${repeated} 個近期母題或禁用元素` : "",
+      genericChoices ? `有 ${genericChoices} 個選項太像功能按鈕` : "",
       hasTwist ? "有明確反轉語氣" : "",
+      hasDilemma ? "有具體抉擇代價" : "",
+      hasEnglishNoise ? "含有出戲英文介面詞" : "",
     ].filter(Boolean),
-    shouldRegenerate: score < 55,
+    shouldRegenerate: score < 66,
   };
 }
 
-async function callOpenAi(prompt, maxOutputTokens) {
+async function callOpenAi(prompt, maxOutputTokens, model = MAIN_MODEL) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS);
 
@@ -415,7 +495,7 @@ async function callOpenAi(prompt, maxOutputTokens) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: MODEL,
+        model,
         instructions: buildSystemPrompt(),
         input: prompt,
         max_output_tokens: maxOutputTokens,
@@ -453,14 +533,15 @@ export async function generateNovelScene(kind, payload) {
   const maxOutputTokens = kind === "settlement" || kind === "death" ? 1800 : 2400;
   const prompt = buildPrompt(kind, payload);
   let scene = await callOpenAi(prompt, maxOutputTokens);
-  let novelty = noveltyScore(scene);
+  let novelty = noveltyScore(scene, payload);
 
   if (novelty.shouldRegenerate && kind !== "settlement") {
     scene = await callOpenAi(
-      `${prompt}\n\n上一版新奇度不足：${novelty.reasons.join("、")}。請重寫，加入世界規則異常、前世衝突、因果代價或跨世界反轉。`,
+      `${prompt}\n\n上一版新奇度不足：${novelty.reasons.join("、")}。請重寫，避開剛才重複元素，加入世界規則異常、前世衝突、因果代價或跨世界反轉。不要使用 unknown、status、risk、debug 等英文介面詞。`,
       maxOutputTokens,
+      QUICK_MODEL,
     );
-    novelty = noveltyScore(scene);
+    novelty = noveltyScore(scene, payload);
   }
 
   return {

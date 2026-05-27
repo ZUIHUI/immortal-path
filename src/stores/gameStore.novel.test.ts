@@ -72,7 +72,9 @@ describe("gameStore novel progression", () => {
     expect(state.life?.fateId).toMatch(/^fate_/);
     expect(state.life?.lifeThemeId).toMatch(/^life_theme_/);
     expect(state.novelState.pendingChoices.length).toBe(2);
+    expect(state.novelState.typingBlockId).toBe("novel_store_scene_001");
     expect(startNovelLife).toHaveBeenCalledOnce();
+    expect(vi.mocked(startNovelLife).mock.calls[0]?.[0].narrativeDirectives?.sceneRecipe.requiredTwist).toBeTruthy();
   });
 
   it("does not generate a new opening while pending choices exist", async () => {
@@ -100,6 +102,8 @@ describe("gameStore novel progression", () => {
     expect(continueNovelScene).toHaveBeenCalledOnce();
     expect(state.novelState.visibleStory.map((block) => block.chapterTitle)).toContain("門後之人");
     expect(state.novelState.lastSelectedChoice?.choiceId).toBe("open_door");
+    expect(state.novelState.typingBlockId).toBe("novel_store_scene_002");
+    expect(vi.mocked(continueNovelScene).mock.calls[0]?.[0].narrativeDirectives?.sceneRecipe.doNotRepeat.length).toBeGreaterThan(0);
   });
 
   it("death hiddenEffect switches the novel state into settlement-ready death flow", async () => {
@@ -156,6 +160,7 @@ describe("gameStore novel progression", () => {
     useGameStore.getState().skipTypewriter();
 
     expect(useGameStore.getState().novelState.isTyping).toBe(false);
+    expect(useGameStore.getState().novelState.typingBlockId).toBeNull();
     expect(useGameStore.getState().novelState.pendingChoices.length).toBe(2);
   });
 });

@@ -20,6 +20,7 @@ import {
 } from "../core/eventEngine";
 import { resolveHiddenEffects } from "../core/hiddenEffectResolver";
 import { resolveAiSuggestedEffects } from "../core/narrativeEffectResolver";
+import { createSceneRecipe } from "../core/sceneRecipe";
 import {
   applyReincarnationResult,
   createInitialMeta,
@@ -34,6 +35,7 @@ import { getFateById } from "../data/fates";
 import { getIdentityById } from "../data/identities";
 import { createInfiniteLifeSelection } from "../data/infiniteFlow";
 import { getLegacyRelicById, getRelicsForWorld } from "../data/legacyRelics";
+import { getLifeThemeById } from "../data/lifeThemes";
 import { getHigherRealmId, getNextRealm } from "../data/realms";
 import { getShopItemById } from "../data/reincarnationShop";
 import { getWorldById } from "../data/worlds";
@@ -184,6 +186,7 @@ function createEmptyNovelState(): NovelState {
     currentArc: "",
     storySoFarSummary: "",
     visibleStory: [],
+    typingBlockId: null,
     pendingChoices: [],
     lastSelectedChoice: null,
     internalFlags: [],
@@ -201,6 +204,26 @@ function createEmptyNovelState(): NovelState {
     isDead: false,
     isSettlementReady: false,
     error: null,
+  };
+}
+
+function normalizeNovelState(novelState: NovelState | undefined): NovelState {
+  const fallback = createEmptyNovelState();
+
+  if (!novelState) {
+    return fallback;
+  }
+
+  return {
+    ...fallback,
+    ...novelState,
+    hiddenState: {
+      ...fallback.hiddenState,
+      ...novelState.hiddenState,
+    },
+    isGenerating: false,
+    isTyping: false,
+    typingBlockId: null,
   };
 }
 
@@ -246,7 +269,7 @@ function getInitialState(): GameStateData {
       currentEvent: loaded.currentEvent,
       latestResult: loaded.latestResult,
       aiNarrativeState: loaded.aiNarrativeState ?? createEmptyAiNarrativeState(),
-      novelState: loaded.novelState ?? createEmptyNovelState(),
+      novelState: normalizeNovelState(loaded.novelState),
       currentPage: loaded.player ? loaded.currentPage : "start",
     };
   }
@@ -360,6 +383,37 @@ function createNovelStoryBlock(
   };
 }
 
+const novelMotifKeywords = [
+  "前世",
+  "下一世",
+  "輪迴",
+  "因果",
+  "天道",
+  "影子",
+  "名字",
+  "玉符",
+  "防火牆",
+  "錯誤碼",
+  "地鐵",
+  "手機",
+  "神像",
+  "夢",
+  "星艦",
+  "火種",
+  "第七日",
+  "心魔",
+  "遺物",
+  "世界規則",
+];
+
+function extractNovelMotifsFromScene(scene: AiNovelScene): string[] {
+  const text = `${scene.chapterTitle} ${scene.storyText} ${scene.choices
+    .map((choice) => choice.text)
+    .join(" ")} ${scene.noveltyHints.join(" ")}`;
+
+  return novelMotifKeywords.filter((motif) => text.includes(motif));
+}
+
 function appendNovelScene(
   novelState: NovelState,
   scene: AiNovelScene,
@@ -376,6 +430,7 @@ function appendNovelScene(
     currentArc: scene.storyState.currentArc,
     storySoFarSummary: nextSummary,
     visibleStory: [...novelState.visibleStory, block].slice(-24),
+    typingBlockId: block.id,
     pendingChoices:
       scene.storyState.isDeathScene || scene.storyState.isSettlementScene
         ? []
@@ -385,7 +440,11 @@ function appendNovelScene(
       tensionLevel: scene.storyState.tensionLevel,
       recentSceneTypes: [sceneType, ...novelState.hiddenState.recentSceneTypes].slice(0, 6),
       recentMotifs: Array.from(
-        new Set([...scene.noveltyHints, ...novelState.hiddenState.recentMotifs]),
+        new Set([
+          ...extractNovelMotifsFromScene(scene),
+          ...scene.noveltyHints,
+          ...novelState.hiddenState.recentMotifs,
+        ]),
       ).slice(0, 12),
       unresolvedMysteries: Array.from(
         new Set([
@@ -412,12 +471,22 @@ function createNovelApiPayload(state: GameStateData) {
     throw new Error("尚未開始輪迴");
   }
 
+  const world = getWorldById(state.life.worldId);
+  const lifeTheme = getLifeThemeById(state.life.lifeThemeId);
+
   return {
     lifeState: state.life,
     metaProgress: state.meta,
     playerSnapshot: createNarrativePlayerSnapshot(state.player),
     novelState: state.novelState,
     selectedChoice: state.novelState.lastSelectedChoice,
+    narrativeDirectives: createSceneRecipe({
+      lifeState: state.life,
+      novelState: state.novelState,
+      world,
+      lifeTheme,
+      selectedChoice: state.novelState.lastSelectedChoice,
+    }),
   };
 }
 
@@ -1616,6 +1685,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       novelState: {
         ...get().novelState,
         isTyping: false,
+        typingBlockId: null,
       },
     };
 
@@ -1629,6 +1699,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       novelState: {
         ...get().novelState,
         isTyping,
+        typingBlockId: isTyping ? get().novelState.typingBlockId : null,
       },
     };
 

@@ -4,6 +4,7 @@ import type { NovelStoryBlock } from "../../types";
 export interface NovelTypewriterProps {
   blocks: NovelStoryBlock[];
   isTyping: boolean;
+  activeBlockId?: string | null;
   charDelay?: number;
   lineDelay?: number;
   paragraphDelay?: number;
@@ -14,21 +15,36 @@ export interface NovelTypewriterProps {
 
 export function flattenNovelLines(blocks: NovelStoryBlock[]): Array<{
   key: string;
+  blockId: string;
   chapterTitle?: string;
   text: string;
 }> {
   return blocks.flatMap((block) => [
-    { key: `${block.id}-title`, chapterTitle: block.chapterTitle, text: "" },
+    { key: `${block.id}-title`, blockId: block.id, chapterTitle: block.chapterTitle, text: "" },
     ...block.displayLines.map((line, index) => ({
       key: `${block.id}-${index}`,
+      blockId: block.id,
       text: line,
     })),
   ]);
 }
 
+export function getFirstAnimatedLineIndex(
+  blocks: NovelStoryBlock[],
+  activeBlockId: string | null | undefined,
+): number {
+  if (!activeBlockId) {
+    return -1;
+  }
+
+  const lines = flattenNovelLines(blocks);
+  return lines.findIndex((line) => line.key === `${activeBlockId}-title`);
+}
+
 export function NovelTypewriter({
   blocks,
   isTyping,
+  activeBlockId,
   charDelay = 24,
   lineDelay = 320,
   paragraphDelay = 620,
@@ -49,12 +65,12 @@ export function NovelTypewriter({
       return;
     }
 
-    const lastBlock = blocks[blocks.length - 1];
-    const firstAnimatedIndex = lines.findIndex((line) => line.key === `${lastBlock?.id}-title`);
+    const targetBlockId = activeBlockId ?? blocks[blocks.length - 1]?.id;
+    const firstAnimatedIndex = lines.findIndex((line) => line.key === `${targetBlockId}-title`);
     const startIndex = firstAnimatedIndex >= 0 ? firstAnimatedIndex : Math.max(0, lines.length - 1);
     setVisibleLineCount(startIndex + 1);
     setCurrentText("");
-  }, [blocks, isTyping, lines]);
+  }, [activeBlockId, blocks, isTyping, lines]);
 
   useEffect(() => {
     containerRef.current?.scrollTo({

@@ -99,6 +99,7 @@ describe("saveService", () => {
             createdAt: new Date().toISOString(),
           },
         ],
+        typingBlockId: "scene_001",
         pendingChoices: [
           {
             choiceId: "follow_shadow",
@@ -117,7 +118,7 @@ describe("saveService", () => {
           recentMotifs: ["影子"],
         },
         isGenerating: false,
-        isTyping: false,
+        isTyping: true,
         hasStarted: true,
         isDead: false,
         isSettlementReady: false,
@@ -130,5 +131,7 @@ describe("saveService", () => {
 
     expect(loaded?.novelState?.visibleStory[0]?.chapterTitle).toBe("月下影息");
     expect(loaded?.novelState?.pendingChoices[0]?.choiceId).toBe("follow_shadow");
+    expect(loaded?.novelState?.isTyping).toBe(false);
+    expect(loaded?.novelState?.typingBlockId).toBeNull();
   });
 });

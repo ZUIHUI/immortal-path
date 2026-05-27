@@ -339,6 +339,58 @@ export interface StoryTheme {
   antiClicheTwist: string;
 }
 
+export type NovelSceneKind =
+  | "opening"
+  | "choice_consequence"
+  | "escalation"
+  | "breakthrough"
+  | "death"
+  | "settlement";
+
+export interface SceneRecipeTheme {
+  category: string;
+  name: string;
+  prompts: string[];
+  antiClicheTwist: string;
+}
+
+export interface SceneRecipe {
+  recipeId: string;
+  sceneKind: NovelSceneKind;
+  primaryTheme: SceneRecipeTheme;
+  secondaryTheme: SceneRecipeTheme;
+  requiredTwist: string;
+  requiredNewElement: string;
+  continuityHook: string;
+  choiceDesignRule: string;
+  forbiddenMotifs: string[];
+  doNotRepeat: string[];
+  fewShotIndex: number;
+  noveltyTarget: string;
+}
+
+export interface NovelNarrativeDirectives {
+  sceneRecipe: SceneRecipe;
+  lifeTheme?: {
+    name: string;
+    description: string;
+    motifs: string[];
+    escalationBeats: string[];
+    finalChoiceHints: string[];
+  };
+  storyThemes: SceneRecipeTheme[];
+  worldDirectives: {
+    name: string;
+    type: WorldType;
+    era: WorldEra;
+    tone: string[];
+    specialTerms: string[];
+    possibleThemes: string[];
+    narrativeConstraints: string[];
+    deathRisks: string[];
+  };
+}
+
 export interface WorldLegacy {
   id: string;
   worldId: WorldId;
@@ -641,6 +693,7 @@ export interface NovelState {
   currentArc: string;
   storySoFarSummary: string;
   visibleStory: NovelStoryBlock[];
+  typingBlockId: string | null;
   pendingChoices: AiNovelChoice[];
   lastSelectedChoice: AiNovelChoice | null;
   internalFlags: string[];

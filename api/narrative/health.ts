@@ -1,5 +1,8 @@
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
-const NARRATIVE_MODEL = "gpt-4.1-nano";
+const NARRATIVE_MODEL =
+  process.env.OPENAI_NOVEL_MODEL ??
+  process.env.OPENAI_MODEL ??
+  "gpt-5.5-thinking";
 const OPENAI_TIMEOUT_MS = 12_000;
 
 function getOpenAiApiKey(): string {

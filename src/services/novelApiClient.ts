@@ -5,6 +5,7 @@ import type {
   LifeState,
   MetaProgress,
   NarrativePlayerSnapshot,
+  NovelNarrativeDirectives,
   NovelState,
 } from "../types";
 
@@ -15,6 +16,7 @@ export interface NovelApiPayload {
   novelState: NovelState;
   selectedChoice?: AiNovelChoice | null;
   generationGoal?: "death" | "settlement";
+  narrativeDirectives?: NovelNarrativeDirectives;
 }
 
 async function postNovelScene(url: string, payload: NovelApiPayload): Promise<AiNovelScene> {

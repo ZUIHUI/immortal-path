@@ -85,6 +85,7 @@ export function NovelReader() {
           <NovelTypewriter
             blocks={novelState.visibleStory}
             isTyping={novelState.isTyping}
+            activeBlockId={novelState.typingBlockId}
             onSkip={skipTypewriter}
             onTypingDone={() => setNovelTyping(false)}
           />

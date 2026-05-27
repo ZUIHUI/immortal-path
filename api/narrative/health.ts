@@ -1,6 +1,16 @@
-import { probeOpenAiNarrativeConnection } from "../../server/narrativeOpenAi";
-
+const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const NARRATIVE_MODEL = "gpt-4.1-nano";
+const OPENAI_TIMEOUT_MS = 12_000;
+
+function getOpenAiApiKey(): string {
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured");
+  }
+
+  return apiKey;
+}
 
 function toApiErrorPayload(error: unknown, fallback: string) {
   if (!(error instanceof Error)) {
@@ -8,15 +18,13 @@ function toApiErrorPayload(error: unknown, fallback: string) {
   }
 
   const apiError = error as Error & {
-    status?: number;
-    code?: string;
+    code?: string | number;
     type?: string;
   };
 
   return {
     ok: false,
     error: error.message,
-    status: apiError.status,
     code: apiError.code,
     type: apiError.type,
   };
@@ -30,25 +38,40 @@ function getProbe(request: any): string | null {
   return new URL(request.url ?? "/", "https://local.invalid").searchParams.get("probe");
 }
 
-async function handleHealth(request: any) {
-  const probe = getProbe(request);
-  let openAiProbe = null;
+async function probeOpenAi() {
+  const startedAt = Date.now();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS);
 
-  if (probe === "openai") {
-    try {
-      openAiProbe = await probeOpenAiNarrativeConnection();
-    } catch (error) {
-      openAiProbe = toApiErrorPayload(error, "OpenAI probe failed");
-    }
+  try {
+    const response = await fetch(OPENAI_RESPONSES_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${getOpenAiApiKey()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: NARRATIVE_MODEL,
+        input: "Reply with only OK.",
+        max_output_tokens: 16,
+        store: false,
+      }),
+      signal: controller.signal,
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    return {
+      ok: response.ok,
+      status: response.status,
+      model: NARRATIVE_MODEL,
+      elapsedMs: Date.now() - startedAt,
+      error: payload.error?.message ?? null,
+      code: payload.error?.code ?? null,
+      type: payload.error?.type ?? null,
+    };
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  return {
-    ok: true,
-    hasOpenAiKey: Boolean(process.env.OPENAI_API_KEY),
-    model: NARRATIVE_MODEL,
-    nodeEnv: process.env.NODE_ENV ?? null,
-    openAiProbe,
-  };
 }
 
 export default async function handler(request: any, response: any) {
@@ -57,5 +80,21 @@ export default async function handler(request: any, response: any) {
     return;
   }
 
-  response.status(200).json(await handleHealth(request));
+  let openAiProbe = null;
+
+  if (getProbe(request) === "openai") {
+    try {
+      openAiProbe = await probeOpenAi();
+    } catch (error) {
+      openAiProbe = toApiErrorPayload(error, "OpenAI probe failed");
+    }
+  }
+
+  response.status(200).json({
+    ok: true,
+    hasOpenAiKey: Boolean(process.env.OPENAI_API_KEY),
+    model: NARRATIVE_MODEL,
+    nodeEnv: process.env.NODE_ENV ?? null,
+    openAiProbe,
+  });
 }

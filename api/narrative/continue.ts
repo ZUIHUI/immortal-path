@@ -1,8 +1,8 @@
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const NARRATIVE_MODEL = "gpt-4.1-nano";
-const OPENAI_TIMEOUT_MS = 24_000;
-const MAX_OUTPUT_TOKENS = 750;
-const TEMPERATURE = 0.55;
+const OPENAI_TIMEOUT_MS = 20_000;
+const MAX_OUTPUT_TOKENS = 520;
+const TEMPERATURE = 0.5;
 
 const REALM_NAMES: Record<string, string> = {
   realm_mortal: "凡人",
@@ -67,77 +67,43 @@ const TEXT_REPLACEMENTS: Record<string, string> = {
   heart_demon: "心魔",
 };
 
-const AI_NARRATIVE_RESPONSE_JSON_SCHEMA = {
+const COMPACT_NARRATIVE_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: [
-    "sceneId",
-    "title",
-    "content",
-    "mood",
-    "rarity",
-    "choices",
-    "suggestedEffects",
-    "settlementTags",
-    "logText",
-    "shouldEndEvent",
-    "shouldTriggerDeath",
-    "deathReason",
-    "shouldTriggerBreakthrough",
-    "shouldCompleteWorldObjective",
-  ],
+  required: ["id", "t", "c", "m", "r", "ch", "e", "tags", "log", "end", "dead", "dr", "bt", "done"],
   properties: {
-    sceneId: { type: "string", minLength: 4, maxLength: 80 },
-    title: { type: "string", minLength: 2, maxLength: 40 },
-    content: { type: "string", minLength: 40, maxLength: 180 },
-    mood: {
-      type: "string",
-      enum: ["calm", "mysterious", "danger", "epic", "breakthrough", "death"],
-    },
-    rarity: {
-      type: "string",
-      enum: ["common", "rare", "epic", "legendary", "mythic"],
-    },
-    choices: {
+    id: { type: "string", minLength: 3, maxLength: 36 },
+    t: { type: "string", minLength: 2, maxLength: 24 },
+    c: { type: "string", minLength: 36, maxLength: 150 },
+    m: { type: "string", enum: ["calm", "mysterious", "danger", "epic", "breakthrough", "death"] },
+    r: { type: "string", enum: ["common", "rare", "epic", "legendary", "mythic"] },
+    ch: {
       type: "array",
       minItems: 2,
       maxItems: 2,
       items: {
         type: "object",
         additionalProperties: false,
-        required: [
-          "choiceId",
-          "text",
-          "previewText",
-          "riskLevel",
-          "choiceType",
-          "requirementHint",
-        ],
+        required: ["id", "tx", "pv", "risk", "type", "req"],
         properties: {
-          choiceId: { type: "string", minLength: 2, maxLength: 48 },
-          text: { type: "string", minLength: 2, maxLength: 44 },
-          previewText: { type: "string", minLength: 4, maxLength: 80 },
-          riskLevel: {
-            type: "string",
-            enum: ["safe", "low", "medium", "high", "fatal"],
-          },
-          choiceType: {
-            type: "string",
-            enum: ["cautious", "greedy", "kind", "ruthless", "reckless", "wise"],
-          },
-          requirementHint: { type: ["string", "null"], maxLength: 80 },
+          id: { type: "string", minLength: 2, maxLength: 24 },
+          tx: { type: "string", minLength: 2, maxLength: 28 },
+          pv: { type: "string", minLength: 4, maxLength: 44 },
+          risk: { type: "string", enum: ["safe", "low", "medium", "high", "fatal"] },
+          type: { type: "string", enum: ["cautious", "greedy", "kind", "ruthless", "reckless", "wise"] },
+          req: { type: ["string", "null"], maxLength: 28 },
         },
       },
     },
-    suggestedEffects: {
+    e: {
       type: "array",
-      maxItems: 3,
+      maxItems: 2,
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["type", "target", "intensity", "reason"],
+        required: ["k", "tgt", "in", "why"],
         properties: {
-          type: {
+          k: {
             type: "string",
             enum: [
               "cultivationGain",
@@ -155,26 +121,19 @@ const AI_NARRATIVE_RESPONSE_JSON_SCHEMA = {
               "reincarnationBonus",
             ],
           },
-          target: { type: ["string", "null"], maxLength: 48 },
-          intensity: {
-            type: "string",
-            enum: ["tiny", "small", "medium", "large", "huge"],
-          },
-          reason: { type: "string", minLength: 2, maxLength: 80 },
+          tgt: { type: ["string", "null"], maxLength: 32 },
+          in: { type: "string", enum: ["tiny", "small", "medium", "large", "huge"] },
+          why: { type: "string", minLength: 2, maxLength: 36 },
         },
       },
     },
-    settlementTags: {
-      type: "array",
-      maxItems: 6,
-      items: { type: "string", minLength: 1, maxLength: 24 },
-    },
-    logText: { type: "string", minLength: 4, maxLength: 120 },
-    shouldEndEvent: { type: "boolean" },
-    shouldTriggerDeath: { type: "boolean" },
-    deathReason: { type: ["string", "null"], maxLength: 120 },
-    shouldTriggerBreakthrough: { type: "boolean" },
-    shouldCompleteWorldObjective: { type: "boolean" },
+    tags: { type: "array", maxItems: 3, items: { type: "string", minLength: 1, maxLength: 12 } },
+    log: { type: "string", minLength: 4, maxLength: 60 },
+    end: { type: "boolean" },
+    dead: { type: "boolean" },
+    dr: { type: ["string", "null"], maxLength: 60 },
+    bt: { type: "boolean" },
+    done: { type: "boolean" },
   },
 } as const;
 
@@ -188,104 +147,78 @@ function displayName(map: Record<string, string>, id: unknown, fallback: string)
 
 function getOpenAiApiKey(): string {
   const apiKey = process.env.OPENAI_API_KEY;
-
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
-  }
-
+  if (!apiKey) throw new Error("OPENAI_API_KEY is not configured");
   return apiKey;
 }
 
 function toApiErrorPayload(error: unknown, fallback: string) {
-  if (!(error instanceof Error)) {
-    return { error: fallback };
+  if (!(error instanceof Error)) return { error: fallback };
+  const apiError = error as Error & { code?: string | number; type?: string };
+  return { error: error.message, code: apiError.code, type: apiError.type };
+}
+
+function sanitizeText(value: unknown, fallback = ""): string {
+  if (typeof value !== "string") return fallback;
+  let text = value;
+  for (const [from, to] of Object.entries(TEXT_REPLACEMENTS)) {
+    text = text.replaceAll(from, to);
   }
+  text = text
+    .replace(/\b[a-zA-Z][a-zA-Z0-9_]*\b/g, "")
+    .replace(/_+/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return text || fallback;
+}
 
-  const apiError = error as Error & {
-    code?: string | number;
-    type?: string;
-  };
-
+function expandCompactNarrative(value: any) {
   return {
-    error: error.message,
-    code: apiError.code,
-    type: apiError.type,
+    sceneId: String(value.id ?? `scene_${Date.now()}`),
+    title: sanitizeText(value.t, "青雲奇遇"),
+    content: sanitizeText(value.c, "雲霧深處靈機浮動，一場抉擇悄然降臨。"),
+    mood: value.m ?? "mysterious",
+    rarity: value.r ?? "common",
+    choices: Array.isArray(value.ch)
+      ? value.ch.map((choice: any) => ({
+          choiceId: String(choice.id ?? `choice_${Math.random().toString(36).slice(2, 8)}`),
+          text: sanitizeText(choice.tx, "謹慎前行"),
+          previewText: sanitizeText(choice.pv, "可能帶來機緣，也暗藏風險。"),
+          riskLevel: choice.risk ?? "low",
+          choiceType: choice.type ?? "wise",
+          requirementHint:
+            choice.req === null || choice.req === undefined ? undefined : sanitizeText(choice.req),
+        }))
+      : [],
+    suggestedEffects: Array.isArray(value.e)
+      ? value.e.map((effect: any) => ({
+          type: effect.k ?? "cultivationGain",
+          target: effect.tgt ?? undefined,
+          intensity: effect.in ?? "small",
+          reason: sanitizeText(effect.why, "機緣牽引"),
+        }))
+      : [],
+    settlementTags: Array.isArray(value.tags)
+      ? value.tags.map((tag: unknown) => sanitizeText(tag, "奇遇"))
+      : [],
+    logText: sanitizeText(value.log, "你經歷了一場奇遇。"),
+    shouldEndEvent: Boolean(value.end),
+    shouldTriggerDeath: Boolean(value.dead),
+    deathReason: value.dr === null || value.dr === undefined ? undefined : sanitizeText(value.dr),
+    shouldTriggerBreakthrough: Boolean(value.bt),
+    shouldCompleteWorldObjective: Boolean(value.done),
   };
 }
 
 function extractOutputText(payload: any): string | undefined {
-  if (payload.output_text) {
-    return payload.output_text;
-  }
-
+  if (payload.output_text) return payload.output_text;
   return payload.output
     ?.flatMap((item: any) => item.content ?? [])
     .find((content: any) => content.type === "output_text" && content.text)
     ?.text;
 }
 
-function sanitizeText(value: unknown, fallback = ""): string {
-  if (typeof value !== "string") {
-    return fallback;
-  }
-
-  let text = value;
-
-  for (const [from, to] of Object.entries(TEXT_REPLACEMENTS)) {
-    text = text.replaceAll(from, to);
-  }
-
-  text = text
-    .replace(/\b[a-zA-Z][a-zA-Z0-9_]*\b/g, "")
-    .replace(/_+/g, "")
-    .replace(/\s{2,}/g, " ")
-    .trim();
-
-  return text || fallback;
-}
-
-function sanitizeNarrativeResponse(value: any) {
-  return {
-    ...value,
-    title: sanitizeText(value.title, "青雲奇遇"),
-    content: sanitizeText(value.content, "雲霧深處靈機浮動，一場抉擇悄然降臨。"),
-    logText: sanitizeText(value.logText, "你經歷了一場奇遇。"),
-    deathReason:
-      value.deathReason === null || value.deathReason === undefined
-        ? value.deathReason
-        : sanitizeText(value.deathReason),
-    settlementTags: Array.isArray(value.settlementTags)
-      ? value.settlementTags.map((tag: unknown) => sanitizeText(tag, "奇遇"))
-      : [],
-    choices: Array.isArray(value.choices)
-      ? value.choices.map((choice: any) => ({
-          ...choice,
-          text: sanitizeText(choice.text, "謹慎前行"),
-          previewText: sanitizeText(choice.previewText, "可能帶來機緣，也暗藏風險。"),
-          requirementHint:
-            choice.requirementHint === null || choice.requirementHint === undefined
-              ? choice.requirementHint
-              : sanitizeText(choice.requirementHint),
-        }))
-      : value.choices,
-    suggestedEffects: Array.isArray(value.suggestedEffects)
-      ? value.suggestedEffects.map((effect: any) => ({
-          ...effect,
-          reason: sanitizeText(effect.reason, "機緣牽引"),
-        }))
-      : value.suggestedEffects,
-  };
-}
-
 function buildSystemPrompt(): string {
-  return [
-    "你是文字修仙遊戲的小說式敘事引擎，只輸出符合 JSON schema 的 JSON。",
-    "content 用繁中修仙小說語氣，約 80 到 140 字，有事件延續、結果與下一步張力。",
-    "不要提到 AI、模型、prompt、JSON、系統提示；正文不要寫精確數值獎勵。",
-    "title、content、choices.text、previewText、logText、settlementTags、reason 必須全中文，不得出現英文字母、底線、ID、enum 值。",
-    "choices 固定 2 個；suggestedEffects 最多 3 個，只能用 tiny/small/medium/large/huge。",
-    "AI 只能建議 suggestedEffects，實際數值由遊戲核心計算。",
-  ].join("\n");
+  return "繁中修仙續寫，只回短鍵JSON。可見文字全中文無英文/底線/ID。c約70-110字，ch兩個，e最多兩個。數值只放e。";
 }
 
 function buildContinuePrompt(payload: any): string {
@@ -293,25 +226,24 @@ function buildContinuePrompt(payload: any): string {
   const scene = payload?.currentNarrativeState ?? {};
   const choice = payload?.selectedChoice ?? {};
   const recentLogs = Array.isArray(payload?.recentLogs)
-    ? payload.recentLogs.slice(0, 5)
+    ? payload.recentLogs.slice(0, 2).map((log: any) => String(log.message ?? log).slice(0, 48))
     : [];
 
   return [
-    "任務：根據玩家上一個選擇，生成下一段修仙小說式事件結果或延續。",
-    `境界：${displayName(REALM_NAMES, player.realmId, "未知境界")}，修為 ${player.cultivation ?? 0}`,
-    `悟性/福緣/道心：${player.comprehension ?? 0}/${player.luck ?? 0}/${player.daoHeart ?? 0}`,
-    `上一段事件：${scene.title ?? ""} ${scene.content ?? ""}`,
-    `玩家選擇：${sanitizeText(choice.text ?? "", "未知選擇")}，風險 ${sanitizeText(choice.riskLevel ?? "", "未知")}`,
-    `最近修仙日誌：${JSON.stringify(recentLogs)}`,
-    "安全選擇低風險小收益；貪婪/莽撞可提高 rarity 或風險。",
-    "內部 target 白名單只可用於 JSON 欄位，不可寫進任何玩家看見的文字。",
-  ].join("\n");
+    "續寫",
+    `境:${displayName(REALM_NAMES, player.realmId, "未知境界")} 修:${player.cultivation ?? 0}`,
+    `悟福心:${player.comprehension ?? 0}/${player.luck ?? 0}/${player.daoHeart ?? 0}`,
+    `前:${sanitizeText(`${scene.title ?? ""} ${scene.content ?? ""}`).slice(0, 110)}`,
+    `選:${sanitizeText(choice.text ?? "", "未知選擇")} 風:${sanitizeText(choice.riskLevel ?? "", "未知")}`,
+    recentLogs.length ? `近:${recentLogs.join("；")}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 async function callOpenAi(prompt: string) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS);
-
   try {
     const response = await fetch(OPENAI_RESPONSES_URL, {
       method: "POST",
@@ -327,34 +259,19 @@ async function callOpenAi(prompt: string) {
         temperature: TEMPERATURE,
         store: false,
         text: {
-          format: {
-            type: "json_schema",
-            name: "ai_narrative_scene",
-            strict: true,
-            schema: AI_NARRATIVE_RESPONSE_JSON_SCHEMA,
-          },
+          format: { type: "json_schema", name: "n", strict: true, schema: COMPACT_NARRATIVE_SCHEMA },
         },
       }),
       signal: controller.signal,
     });
     const payload = await response.json().catch(() => ({}));
-
     if (!response.ok) {
       const message = payload.error?.message ?? response.statusText;
-      throw new Error(
-        [`status=${response.status}`, payload.error?.code, payload.error?.type, message]
-          .filter(Boolean)
-          .join(" "),
-      );
+      throw new Error([`status=${response.status}`, payload.error?.code, payload.error?.type, message].filter(Boolean).join(" "));
     }
-
     const outputText = extractOutputText(payload);
-
-    if (!outputText) {
-      throw new Error("OpenAI response did not include output_text");
-    }
-
-    return sanitizeNarrativeResponse(JSON.parse(outputText));
+    if (!outputText) throw new Error("OpenAI response did not include output_text");
+    return expandCompactNarrative(JSON.parse(outputText));
   } finally {
     clearTimeout(timeoutId);
   }
